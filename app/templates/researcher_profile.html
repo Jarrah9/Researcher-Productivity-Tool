@@ -19,8 +19,9 @@
         body { font-family: Arial, sans-serif; background: #f7f7f7; margin: 0; }
         .container { max-width: 1100px; margin: 40px auto; background: #fff; border-radius: 12px; box-shadow: 0 2px 8px #ccc; padding: 32px; }
         .header { display: flex; align-items: center; }
-        .name { font-size: 2em; font-weight: bold; margin-right: 24px; }
-        .uni-department a{ font-size: 1.0em; color: #949494; margin-top: 10px; }
+        .name a { font-size: 2em; font-weight: bold; margin-right: 24px; color: #000000; text-decoration: none; }
+        .name a:hover { color: #0d47a1; text-decoration: underline; }
+        .uni-department a{ font-size: 1.0em; color: #949494; margin-top: 10px; text-decoration: none; }
         .uni-department a:hover { color: #0d47a1; text-decoration: underline; }
         .level { font-size: 1.2em; color: #555; margin-top: 10px; margin-bottom: 32px; }
         .section-title { font-size: 1.2em; font-weight: bold; margin: 32px 0 12px 0; }
@@ -31,8 +32,6 @@
         .pub-table a:hover { color: #5b129b; text-decoration: underline; }
         .arrow { margin-left: 6px; font-size: 0.8em; opacity: 0.6; }
         #searchInput { margin: 10px 0; padding: 6px 8px; width: 240px; }
-        a { color: #000000; text-decoration: none; }
-        a:hover { color: #0d47a1; text-decoration: underline; }
         #pagination { margin-top: 18px; text-align: center; }
         #pagination button[disabled] { opacity: 0.5; cursor: not-allowed; }
         .controls { display: flex; gap: 12px; align-items: center; justify-content: space-between; margin: 12px 0; }
@@ -121,7 +120,6 @@
             <th data-type="text">Journal Name <span class="arrow"></span></th>
             <th data-type="number">Year <span class="arrow"></span></th>
             <th data-type="text">ABDC Ranking <span class="arrow"></span></th>
-            <th data-type="number">No. of Authors <span class="arrow"></span></th>
         </tr>
         </thead>
         <tbody>
@@ -137,7 +135,6 @@
                 <td>{{ pub.journal if pub.journal else "Working Paper"}}</td>
                 <td>{{ pub.year }}</td>
                 <td>{{ pub.ranking }}</td>
-                <td>{{ pub.num_authors }}</td> <!-- Here might need to +1 if data scraped is number of co-authors -->
             </tr>
         {% endfor %}
         </tbody>
@@ -239,6 +236,18 @@
             const type = th.dataset.type || 'text';
             const va = getCellText(a, idx);
             const vb = getCellText(b, idx);
+            if (idx === 3) {
+                // Define ABDC order
+                const abdcOrder = { "A*": 1, "A": 2, "B": 3, "C": 4, "D": 5 };
+                const vaEmpty = !va || va.trim() === "";
+                const vbEmpty = !vb || vb.trim() === "";
+                if (vaEmpty && vbEmpty) return 0;
+                if (vaEmpty) return 1;  // 'a' is empty, so 'a' goes after 'b'
+                if (vbEmpty) return -1; // 'b' is empty, so 'b' goes after 'a'
+                const vaRank = abdcOrder[va.trim()] ?? 999;
+                const vbRank = abdcOrder[vb.trim()] ?? 999;
+                return dir === 'asc' ? vaRank - vbRank : vbRank - vaRank;
+            }
             let cmp;
             if (type === 'number') {
                 const na = asNumber(va);
