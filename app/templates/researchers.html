@@ -52,11 +52,12 @@
 
         <label for="sort_by" style="font-weight:bold;">Rank by:</label>
         <select name="sort_by" id="sort_by" style="padding:6px 12px; font-size:1em; border-radius:4px; border:1px solid #bbb;">
-            <option value="total_articles" {% if request.query_params.get('sort_by', 'total_articles') == "total_articles" %}selected{% endif %}>Total number of articles</option>
-            <option value="abdc_a_star_a" {% if request.query_params.get('sort_by', 'total_articles') == "abdc_a_star_a" %}selected{% endif %}>Number of A* and A ranked journals</option>
-            <option value="avg_jif" {% if request.query_params.get('sort_by', 'total_articles') == "avg_jif" %}selected{% endif %}>Average JIF of articles</option>
-            <option value="avg_jif_5" {% if request.query_params.get('sort_by', 'total_articles') == "avg_jif_5" %}selected{% endif %}>Average 5-year JIF of articles</option>
-            <option value="avg_citation" {% if request.query_params.get('sort_by', 'total_articles') == "avg_citation" %}selected{% endif %}>Average citation percentage</option>
+            <option value="total_articles" {% if request.query_params.get('sort_by', 'abdc_articles') == "total_articles" %}selected{% endif %}>Total number of articles</option>
+            <option value="abdc_articles" {% if request.query_params.get('sort_by', 'abdc_articles') == "abdc_articles" %}selected{% endif %}>Number of articles with ABDC Ranking</option>
+            <option value="abdc_a_star_a" {% if request.query_params.get('sort_by', 'abdc_articles') == "abdc_a_star_a" %}selected{% endif %}>Number of A* and A ranked journals</option>
+            <option value="avg_jif" {% if request.query_params.get('sort_by', 'abdc_articles') == "avg_jif" %}selected{% endif %}>Average JIF of articles</option>
+            <option value="avg_jif_5" {% if request.query_params.get('sort_by', 'abdc_articles') == "avg_jif_5" %}selected{% endif %}>Average 5-year JIF of articles</option>
+            <option value="avg_citation" {% if request.query_params.get('sort_by', 'abdc_articles') == "avg_citation" %}selected{% endif %}>Average citation percentage</option>
         </select>
 
         <button type="submit" style="padding:7px 18px; background:#1976d2; color:#fff; border:none; border-radius:4px; font-size:1em; cursor:pointer;">Update</button>

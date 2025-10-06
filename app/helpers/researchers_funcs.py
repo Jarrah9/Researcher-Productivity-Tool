@@ -20,7 +20,7 @@ def filter_researchers(request, researcher_list):
     return filtered
 
 def get_researcher_data(request: Request, RESEARCHER_STATS_CACHE):
-    sort_by = request.query_params.get("sort_by", "total_articles")
+    sort_by = request.query_params.get("sort_by", "abdc_articles")
 
     if RESEARCHER_STATS_CACHE is None:
         db = SessionLocal()
@@ -35,6 +35,7 @@ def get_researcher_data(request: Request, RESEARCHER_STATS_CACHE):
             for r in researchers:
                 pubs = pubs_by_researcher.get(r.id, [])
                 total_articles = len(pubs)
+                abdc_articles = 0
                 abdc_a_star_a = 0
                 jif_list = []
                 jif5_list = []
@@ -42,6 +43,8 @@ def get_researcher_data(request: Request, RESEARCHER_STATS_CACHE):
                 for pub in pubs:
                     journal = journals.get(pub.journal_id)
                     if journal:
+                        if journal.abdc_rank:
+                            abdc_articles += 1
                         if journal.abdc_rank in ["A*", "A"]:
                             abdc_a_star_a += 1
                         if journal.JIF is not None:
@@ -60,6 +63,7 @@ def get_researcher_data(request: Request, RESEARCHER_STATS_CACHE):
                     "level": r.level,
                     "university": r.university,
                     "total_articles": total_articles,
+                    "abdc_articles": abdc_articles,
                     "abdc_a_star_a": abdc_a_star_a,
                     "avg_jif": avg_jif,
                     "avg_jif5": avg_jif5,
@@ -79,6 +83,11 @@ def get_researcher_data(request: Request, RESEARCHER_STATS_CACHE):
         for r in researcher_list:
             r["variable_value"] = r["total_articles"]
         researcher_list.sort(key=lambda x: x["total_articles"], reverse=True)
+    elif sort_by == "abdc_articles":
+        variable_label = "Articles with ABDC"
+        for r in researcher_list:
+            r["variable_value"] = r["abdc_articles"]
+        researcher_list.sort(key=lambda x: x["abdc_articles"], reverse=True)
     elif sort_by == "abdc_a_star_a":
         variable_label = "A*/A Journals"
         for r in researcher_list:
