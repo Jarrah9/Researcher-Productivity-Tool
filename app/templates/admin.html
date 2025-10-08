@@ -49,6 +49,11 @@
 {% block content %}
 <div class="admin-card">
   <h1 class="mb-4">Admin Dashboard</h1>
+  {% if flash %}
+    <div class="alert alert-info mt-3" role="alert">
+      {{ flash|safe }}
+    </div>
+  {% endif %}
   <div class="mb-4">
     <h4>Database Management</h4>
     <table class="table db-table mb-3">
@@ -91,9 +96,9 @@
         </tr>
         {% endfor %}
         <tr>
-          <form action="/admin/create-db" method="post" class="d-flex align-items-center">
+          <form action="/admin/switch-db" method="post" class="d-flex align-items-center">
             <td colspan="2">
-              <input type="text" name="new_db_name" class="form-control" placeholder="New database name" required>
+              <input type="text" name="db_name" class="form-control" placeholder="New database name" required>
             </td>
             <td colspan="2">
               <button type="submit" class="btn btn-success">Create</button>
@@ -112,13 +117,13 @@
       <button type="submit" class="btn btn-primary me-2">Switch</button>
     </form>
   </div>
-  <div class="mb-4">
+  <div class="mb-4" data-current-db="{{ current_db }}">
     <h4>Upload CSV</h4>
     <div>
       <p>Note: the download button will download the data in the current selected database, and is also reprentative of the required CSV templates. You can have other columns in the CSV and they will be ignored.</p>
       <div class="mb-3">
         <h6>Master Spreadsheet</h6>
-        <form class="d-flex align-items-center mt-2" action="/admin/upload/master_csv" method="post" enctype="multipart/form-data">
+        <form class="d-flex align-items-center mt-2 upload-form" action="/admin/upload/master_csv" method="post" enctype="multipart/form-data">
           <input type="file" class="form-control me-2" name="master_csv" accept=".csv">
           <button type="submit" class="btn btn-primary me-2">Upload</button>
           <a href="/admin/download/researchers.csv" class="btn btn-link">Download</a>
@@ -126,7 +131,7 @@
       </div>
       <div class="mb-3">
         <h6>ABDC Rankings</h6>
-        <form class="d-flex align-items-center" action="/admin/upload/abdc" method="post" enctype="multipart/form-data">
+        <form class="d-flex align-items-center upload-form" action="/admin/upload/abdc" method="post" enctype="multipart/form-data">
           <input type="file" class="form-control me-2" name="abdc_csv" accept=".csv">
           <button type="submit" class="btn btn-primary me-2">Upload</button>
           <a href="/admin/download/abdc_template.csv" class="btn btn-link">Download</a>
@@ -134,7 +139,7 @@
       </div>
       <div class="mb-3">
         <h6>UWA Staff to Field Mappings</h6>
-        <form class="d-flex align-items-center" action="/admin/upload/uwa_staff_field" method="post" enctype="multipart/form-data">
+        <form class="d-flex align-items-center upload-form" action="/admin/upload/uwa_staff_field" method="post" enctype="multipart/form-data">
           <input type="file" class="form-control me-2" name="uwa_staff_field_csv" accept=".csv">
           <button type="submit" class="btn btn-primary me-2">Upload</button>
           <a href="/admin/download/UWA_staff_field_template.csv" class="btn btn-link">Download</a>
@@ -142,7 +147,7 @@
       </div>
       <div class="mb-3">
         <h6>Clarivate Rankings</h6>
-        <form class="d-flex align-items-center" action="/admin/upload/clarivate" method="post" enctype="multipart/form-data">
+        <form class="d-flex align-items-center upload-form" action="/admin/upload/clarivate" method="post" enctype="multipart/form-data">
           <input type="file" class="form-control me-2" name="clarivate_csv" accept=".csv">
           <button type="submit" class="btn btn-primary me-2">Upload</button>
           <a href="/admin/download/clarivate_template.csv" class="btn btn-link">Download</a>
@@ -152,11 +157,6 @@
       </div>
     </div>
   </div>
-  {% if flash %}
-    <div class="alert alert-info mt-3" role="alert">
-      {{ flash|safe }}
-    </div>
-  {% endif %}
   <!-- This is the section for running the scraper -->
   <div class="mt-4">
     <h4>Run Scraper (Depreciated)</h4>
@@ -301,5 +301,19 @@
         });
     }
   });
+  (function() {
+    var uploadSection = document.querySelector('[data-current-db]');
+    if (!uploadSection) return;
+    var currentDb = (uploadSection.dataset.currentDb || '').trim().toLowerCase();
+    if (currentDb !== 'main') return;
+    var forms = uploadSection.querySelectorAll('form.upload-form');
+    forms.forEach(function(form) {
+      form.addEventListener('submit', function(evt) {
+        if (!confirm('You are uploading to the "main" database. Are you sure you want to continue?')) {
+          evt.preventDefault();
+        }
+      });
+    });
+  })();
 </script>
 {% endblock %}

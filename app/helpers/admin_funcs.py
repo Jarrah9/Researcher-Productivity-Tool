@@ -442,12 +442,48 @@ def delete_db(db_name):
     script_dir = Path(__file__).resolve().parent
     project_dir = script_dir.parents[1]
     db_path = project_dir / "app" / f"{db_name}.db"
-    db_list_path = project_dir / "app" / "db_list.txt"
 
     # Delete the database file if it exists
     if db_path.exists():
         db_path.unlink()
-
     print(f"Deleted {db_name}.db")
+
+def rename_db(old_db_name, new_db_name):
+    """
+    Renames a database file in the app/ directory and updates db_list.txt.
+    """
+    script_dir = Path(__file__).resolve().parent
+    project_dir = script_dir.parents[1]
+    old_path = project_dir / "app" / f"{old_db_name}.db"
+    new_path = project_dir / "app" / f"{new_db_name}.db"
+    db_list_path = project_dir / "app" / "db_list.txt"
+
+    if not old_path.exists():
+        raise FileNotFoundError(f"{old_db_name}.db not found.")
+    if new_path.exists():
+        raise FileExistsError(f"{new_db_name}.db already exists.")
+
+    old_path.rename(new_path)
+
+    if db_list_path.exists():
+        with open(db_list_path, "r") as f:
+            dbs = [line.strip() for line in f if line.strip()]
+        updated = [new_db_name if name == old_db_name else name for name in dbs]
+        with open(db_list_path, "w") as f:
+            for name in updated:
+                f.write(f"{name}\n")
+
+    if os.getenv("DATABASE_NAME") == old_db_name:
+        os.environ["DATABASE_NAME"] = new_db_name
+    try:
+        from app import database
+        if getattr(database, "CURRENT_DB_NAME", None) == old_db_name:
+            database.CURRENT_DB_NAME = new_db_name
+    except Exception:
+        pass
+
+    print(f"Renamed {old_db_name}.db to {new_db_name}.db")
+
+
 if __name__ == "__main__":
     update_UWA_staff_fields("app/files/UWA_staff_field_mapping_original.csv")

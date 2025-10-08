@@ -187,6 +187,37 @@ async def switch_db_route(request: Request):
     request.session["flash"] = f"Switched to database '{db_name}'."
     return RedirectResponse(url="/admin", status_code=303)
 
+@router.post("/admin/delete-db")
+async def delete_db_route(request: Request):
+    form = await request.form()
+    db_name = form.get("db_name")
+    user = request.session.get("user")
+    if not user or not db_name:
+        return RedirectResponse(url="/", status_code=303)
+    from app.helpers.admin_funcs import delete_db
+    try:
+        delete_db(db_name)
+        request.session["flash"] = f"Database '{db_name}' deleted successfully."
+    except Exception as e:
+        request.session["flash"] = f"Error deleting database '{db_name}': {e}"
+    return RedirectResponse(url="/admin", status_code=303)
+
+@router.post("/admin/rename-db")
+async def rename_db_route(request: Request):
+    form = await request.form()
+    old_db_name = form.get("old_db_name")
+    new_db_name = form.get("new_db_name")
+    user = request.session.get("user")
+    if not user or not old_db_name or not new_db_name:
+        return RedirectResponse(url="/", status_code=303)
+    from app.helpers.admin_funcs import rename_db
+    try:
+        rename_db(old_db_name, new_db_name)
+        request.session["flash"] = f"Database '{old_db_name}' renamed to '{new_db_name}' successfully."
+    except Exception as e:
+        request.session["flash"] = f"Error renaming database '{old_db_name}': {e}"
+    return RedirectResponse(url="/admin", status_code=303)
+
 @router.post("/login")
 async def login_post(request: Request):
     form = await request.form()
