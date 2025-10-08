@@ -115,13 +115,102 @@ def download_master_csv(request):
     return StreamingResponse(csv_iter(), media_type="text/csv", headers=headers)
 
 def download_ABDC_template():
-    return FileResponse("app/files/upload_templates/ABDC_template.csv", media_type="text/csv", filename="ABDC_template.csv")
+    """
+    Streams a CSV of current ABDC journal rankings with the correct template columns.
+    """
+    db: Session = SessionLocal()
+    # Define the column order and names as required by the template
+    header = [
+        "Journal Title", "Rating", "Publisher", "ISSN", "ISSN Online", "FoR", "Year Inception"
+    ]
+    # Query all journals
+    journals = db.query(Journals).all()
+
+    def csv_iter():
+        buf = io.StringIO()
+        writer = csv.writer(buf)
+        writer.writerow(header)
+        yield buf.getvalue()
+        buf.seek(0); buf.truncate(0)
+        for journal in journals:
+            row = [
+                journal.name or "",
+                journal.abdc_rank or "",
+                journal.publisher or "",
+                journal.ISSN or "",
+                journal.eISSN or "",
+                journal.FoR if journal.FoR is not None else "",
+                journal.year_of_inception if journal.year_of_inception is not None else ""
+            ]
+            writer.writerow(row)
+            yield buf.getvalue()
+            buf.seek(0); buf.truncate(0)
+        db.close()
+
+    ts = datetime.datetime.now().strftime("%Y-%m-%d")
+    filename = f"ABDC_current_{ts}.csv"
+    headers = {"Content-Disposition": f'attachment; filename="{filename}"'}
+    return StreamingResponse(csv_iter(), media_type="text/csv", headers=headers)
 
 def download_clarivate_template():
-    return FileResponse("app/files/upload_templates/clarivate_template.csv", media_type="text/csv", filename="clarivate_template.csv")
+    """
+    Streams a CSV of current Clarivate JIF data with the correct template columns.
+    """
+    db: Session = SessionLocal()
+    header = ["ISSN", "JIF", "5 Year JIF", "% of Citable OA"]
+    journals = db.query(Journals).all()
+
+    def csv_iter():
+        buf = io.StringIO()
+        writer = csv.writer(buf)
+        writer.writerow(header)
+        yield buf.getvalue()
+        buf.seek(0); buf.truncate(0)
+        for journal in journals:
+            row = [
+                journal.ISSN or "",
+                journal.JIF if journal.JIF is not None else "",
+                journal.JIF_5_year if journal.JIF_5_year is not None else "",
+                journal.citation_percentage if journal.citation_percentage is not None else ""
+            ]
+            writer.writerow(row)
+            yield buf.getvalue()
+            buf.seek(0); buf.truncate(0)
+        db.close()
+
+    ts = datetime.datetime.now().strftime("%Y-%m-%d")
+    filename = f"clarivate_current_{ts}.csv"
+    headers = {"Content-Disposition": f'attachment; filename="{filename}"'}
+    return StreamingResponse(csv_iter(), media_type="text/csv", headers=headers)
 
 def download_UWA_staff_field_template():
-    return FileResponse("app/files/upload_templates/UWA_staff_field_template.csv", media_type="text/csv", filename="UWA_staff_field_template.csv")
+    """
+    Streams a CSV of current UWA staff fields with the correct template columns.
+    """
+    db: Session = SessionLocal()
+    header = ["Name", "Field"]
+    researchers = db.query(Researchers).filter(Researchers.university == "UWA").all()
+
+    def csv_iter():
+        buf = io.StringIO()
+        writer = csv.writer(buf)
+        writer.writerow(header)
+        yield buf.getvalue()
+        buf.seek(0); buf.truncate(0)
+        for researcher in researchers:
+            row = [
+                researcher.name or "",
+                researcher.field or ""
+            ]
+            writer.writerow(row)
+            yield buf.getvalue()
+            buf.seek(0); buf.truncate(0)
+        db.close()
+
+    ts = datetime.datetime.now().strftime("%Y-%m-%d")
+    filename = f"UWA_staff_field_current_{ts}.csv"
+    headers = {"Content-Disposition": f'attachment; filename="{filename}"'}
+    return StreamingResponse(csv_iter(), media_type="text/csv", headers=headers)
 
 def replace_ABDC_rankings(file_path="app/files/uploads_current/ABDC_upload.csv"):
     df = pd.read_csv(file_path)
@@ -137,7 +226,7 @@ def replace_ABDC_rankings(file_path="app/files/uploads_current/ABDC_upload.csv")
         for _, row in df.iterrows():
             journal = Journals(
                 name=row['Journal Title'],
-                abdc_rank=row['rating'],
+                abdc_rank=row['Rating'],
                 publisher=row['Publisher'],
                 ISSN=row['ISSN'],
                 eISSN=row['ISSN Online'],
