@@ -273,11 +273,6 @@ async def upload_master_csv(
     request: Request,
     master_csv: UploadFile = File(None)
 ):
-    if not request.session.get("edit_mode"):
-        return templates.TemplateResponse(
-            "admin.html",
-            {"request": request, "user": request.session.get("user"), "error": "You must enable edit mode to upload."}
-        )
     if not master_csv:
         return templates.TemplateResponse(
             "admin.html",

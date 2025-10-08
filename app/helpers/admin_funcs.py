@@ -450,8 +450,10 @@ def delete_db(db_name):
 
 def rename_db(old_db_name, new_db_name):
     """
-    Renames a database file in the app/ directory and updates db_list.txt.
+    Renames a database file in the app/ directory by copying it to a new file first,
+    then removing the original. This allows renaming even when the database is active.
     """
+    from shutil import copyfile
     script_dir = Path(__file__).resolve().parent
     project_dir = script_dir.parents[1]
     old_path = project_dir / "app" / f"{old_db_name}.db"
@@ -463,24 +465,53 @@ def rename_db(old_db_name, new_db_name):
     if new_path.exists():
         raise FileExistsError(f"{new_db_name}.db already exists.")
 
-    old_path.rename(new_path)
+    copyfile(old_path, new_path)
+
+    current_db = os.getenv("DATABASE_NAME")
+    db_module = None
+    try:
+        from app import database as db_module
+        module_current = getattr(db_module, "CURRENT_DB_NAME", None)
+        current_db = module_current or current_db
+    except Exception:
+        pass
+
+    is_current = (current_db == old_db_name)
+
+    if is_current and db_module:
+        try:
+            db_module.reload_engine(new_db_name)
+            db_module.CURRENT_DB_NAME = new_db_name
+        except Exception as e:
+            print(f"Warning: Engine reload failed when renaming database. Error: {e}")
+
+    if os.getenv("DATABASE_NAME") == old_db_name:
+        os.environ["DATABASE_NAME"] = new_db_name
+
+    try:
+        old_path.unlink()
+    except Exception as e:
+        print(f"Warning: Could not delete {old_db_name}.db after renaming. Error: {e}")
 
     if db_list_path.exists():
         with open(db_list_path, "r") as f:
             dbs = [line.strip() for line in f if line.strip()]
-        updated = [new_db_name if name == old_db_name else name for name in dbs]
-        with open(db_list_path, "w") as f:
-            for name in updated:
-                f.write(f"{name}\n")
+    else:
+        dbs = []
 
-    if os.getenv("DATABASE_NAME") == old_db_name:
-        os.environ["DATABASE_NAME"] = new_db_name
-    try:
-        from app import database
-        if getattr(database, "CURRENT_DB_NAME", None) == old_db_name:
-            database.CURRENT_DB_NAME = new_db_name
-    except Exception:
-        pass
+    updated = []
+    seen = set()
+    for name in dbs:
+        replacement = new_db_name if name == old_db_name else name
+        if replacement not in seen:
+            updated.append(replacement)
+            seen.add(replacement)
+    if new_db_name not in seen:
+        updated.append(new_db_name)
+
+    with open(db_list_path, "w") as f:
+        for name in updated:
+            f.write(f"{name}\n")
 
     print(f"Renamed {old_db_name}.db to {new_db_name}.db")
 
