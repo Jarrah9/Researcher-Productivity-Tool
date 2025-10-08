@@ -44,8 +44,8 @@ Nowadays, researchers in top universities are required to complete their researc
 ```bash
 # On local machine
 chmod 400 r_tool.pem
-ssh -i r_tool.pem ubuntu@3.25.59.145
-rsync -avz -e "ssh -i r_tool.pem" --delete Project/ ubuntu@3.25.59.145:~/deploy
+ssh -i r_tool.pem ubuntu@<SERVER IP>
+rsync -avz -e "ssh -i r_tool.pem" --delete Project/ ubuntu@<SERVER IP>:~/deploy
 ```
 
 ### 3. Install Runtime Dependencies (on EC2)
