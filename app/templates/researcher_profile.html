@@ -171,6 +171,18 @@
     const headers = table.tHead.rows[0].cells;
 
     const rows = Array.from(tbody.querySelectorAll('tr'));
+    //remember rows per page between ABDC toggles only ---
+    const rowsSelect     = document.getElementById('rowsPerPage');
+    const abdcCheckbox   = document.getElementById('abdcCheckbox');
+    const researcherKey  = 'rowsChoice';
+    const toggleFlagKey  = 'abdcToggle';
+
+    // on load, if we are here due to an ABDC toggle, restore previous rows per page choice
+    if (sessionStorage.getItem(toggleFlagKey) === '1') {
+        const saved = sessionStorage.getItem(researcherKey);
+        if (saved) rowsSelect.value = saved;
+        sessionStorage.removeItem(toggleFlagKey);
+    }
     let rowsPerPage = getRowsPerPage();
     let currentPage = 1;
     let filteredRows = [...rows];
@@ -205,8 +217,8 @@
     document.getElementById('prevPage').onclick = () => showPage(currentPage - 1);
     document.getElementById('nextPage').onclick = () => showPage(currentPage + 1);
 
-    document.getElementById('rowsPerPage').addEventListener('change', function () {
-    sessionStorage.setItem('rowsPerPageChoice', this.value);
+    rowsSelect.addEventListener('change', function () {
+    sessionStorage.setItem(researcherKey, this.value);   // save under our key
     applyFilters();
 });
 
@@ -333,9 +345,12 @@ document.getElementById('searchInput').addEventListener('input', applyFilters);
     showPage(1);
 </script>
 <script>
-    window.addEventListener('beforeunload', () => {
-        sessionStorage.removeItem('rowsPerPageChoice');
-    });
+  abdcCheckbox.addEventListener('change', function () {
+      // remember current rows and mark that the reload is due to a toggle
+      sessionStorage.setItem(researcherKey, rowsSelect.value);
+      sessionStorage.setItem(toggleFlagKey, '1');
+      this.form.requestSubmit();        // reload to server
+  });
 </script>
 </body>
 {% endblock %}
