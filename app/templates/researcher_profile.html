@@ -113,10 +113,10 @@
             <label style="display: flex; align-items: center; gap: 10px; font-weight: normal; font-size: 1.05em;">
                 <input 
                     type="checkbox" 
+                    id="abdcCheckbox"
                     name="abdc_only" 
                     value="true"
-                    {% if abdc_only %}checked{% endif %} 
-                    onchange="this.form.submit()"
+                    {% if abdc_only %}checked{% endif %}
                     style="transform: scale(1.5); accent-color: #1976d2; cursor: pointer;"
                 />
                 Only show ABDC ranked
@@ -169,7 +169,7 @@
     const headers = table.tHead.rows[0].cells;
 
     const rows = Array.from(tbody.querySelectorAll('tr'));
-    let rowsPerPage = 50;
+    let rowsPerPage = getRowsPerPage();
     let currentPage = 1;
     let filteredRows = [...rows];
 
@@ -203,9 +203,7 @@
     document.getElementById('prevPage').onclick = () => showPage(currentPage - 1);
     document.getElementById('nextPage').onclick = () => showPage(currentPage + 1);
 
-    document.getElementById('rowsPerPage').addEventListener('change', function () {
-        showPage(1);
-    });
+    document.getElementById('rowsPerPage').addEventListener('change', applyFilters);
 
     document.getElementById('searchInput').addEventListener('input', function () {
         const q = this.value.toLowerCase();
@@ -222,18 +220,16 @@
         const textMatch = tr.textContent.toLowerCase().includes(q);
 
         const abdcRank = getCellText(tr, 3).trim().toLowerCase();
-
-        console.log("ABDC:", abdcRank);
-
         const validRanks = ['a*', 'a', 'b', 'c', 'd'];
         const hasRanking = validRanks.includes(abdcRank);
 
         return abdcOnly ? textMatch && hasRanking : textMatch;
     });
 
+    filteredRows.forEach(row => tbody.appendChild(row)); // Rebuild order
     rows.forEach(tr => tr.style.display = 'none');
     showPage(1);
-}
+    }
 
 document.getElementById('searchInput').addEventListener('input', applyFilters);
 document.getElementById('abdcCheckbox').addEventListener('change', applyFilters);
