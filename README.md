@@ -55,6 +55,7 @@ sudo apt install -y python3-venv python3-pip
 wget https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb
 sudo apt install ./google-chrome-stable_current_amd64.deb -y
 sudo apt install -y chromium-chromedriver
+sudo apt install xvfb
 ```
 
 ### 4. Create Virtual Environment & Install Packages
@@ -65,16 +66,9 @@ source deployment-venv/bin/activate
 pip install -r requirements.txt
 ```
 
-### 5. Run Application Manually (for smoke testing)
+### 5. Configure Apache Reverse Proxy
 ```bash
-nohup xvfb-run -a uvicorn app.main:app --host 127.0.0.1 --port 8000 &
-```
-- Check logs in `nohup.out`.
-- To stop, list processes with `ps aux | grep uvicorn` and `kill <PID>`.
-
-### 6. Configure Apache Reverse Proxy
-```bash
-sudo apt install -y apache2 libapache2-mod-proxy-uwsgi
+sudo apt install apache2 libapache2-mod-proxy-uwsgi
 sudo a2enmod proxy
 sudo a2enmod proxy_http
 ```
@@ -97,7 +91,7 @@ sudo a2ensite fastapi.conf
 sudo systemctl restart apache2
 ```
 
-### 7. Create systemd Service for Uvicorn
+### 6. Create systemd Service for Uvicorn
 Create `/etc/systemd/system/fastapi.service`:
 ```ini
 [Unit]
@@ -119,6 +113,12 @@ sudo systemctl daemon-reload
 sudo systemctl enable fastapi
 sudo systemctl start fastapi
 ```
+### 7. Run Application
+```bash
+nohup xvfb-run -a uvicorn app.main:app --host 127.0.0.1 --port 8000
+```
+- Check logs in `nohup.out`.
+- To stop, list processes with `ps aux | grep uvicorn` and `kill <PID>`.
 
 ### 8. Maintenance Commands
 - Check service status: `sudo systemctl status fastapi`
