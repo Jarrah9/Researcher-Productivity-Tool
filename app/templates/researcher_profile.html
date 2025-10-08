@@ -109,14 +109,16 @@
         <div style="font-size: 0.85em; color: #555; margin-bottom: 1px;">
             Note: <b>Shift+Click</b> column headers for secondary sorting etc.
         </div>
-                <form method="get" style="margin-bottom: 16px;">
+        <form method="get" style="margin-bottom: 16px;">
+            <input type="hidden" name="abdc_only" value="false">
             <label style="display: flex; align-items: center; gap: 10px; font-weight: normal; font-size: 1.05em;">
-                <input 
-                    type="checkbox" 
+                <input
+                    type="checkbox"
                     id="abdcCheckbox"
-                    name="abdc_only" 
+                    name="abdc_only"
                     value="true"
                     {% if abdc_only %}checked{% endif %}
+                    onchange="this.form.requestSubmit()"
                     style="transform: scale(1.5); accent-color: #1976d2; cursor: pointer;"
                 />
                 Only show ABDC ranked
@@ -203,7 +205,10 @@
     document.getElementById('prevPage').onclick = () => showPage(currentPage - 1);
     document.getElementById('nextPage').onclick = () => showPage(currentPage + 1);
 
-    document.getElementById('rowsPerPage').addEventListener('change', applyFilters);
+    document.getElementById('rowsPerPage').addEventListener('change', function () {
+    sessionStorage.setItem('rowsPerPageChoice', this.value);
+    applyFilters();
+});
 
     document.getElementById('searchInput').addEventListener('input', function () {
         const q = this.value.toLowerCase();
@@ -232,7 +237,7 @@
     }
 
 document.getElementById('searchInput').addEventListener('input', applyFilters);
-document.getElementById('abdcCheckbox').addEventListener('change', applyFilters);
+//document.getElementById('abdcCheckbox').addEventListener('change', applyFilters);
 
     // Multi-column sorting
     const sortOrder = [];
@@ -326,6 +331,11 @@ document.getElementById('abdcCheckbox').addEventListener('change', applyFilters)
 
     renderSortArrows();
     showPage(1);
+</script>
+<script>
+    window.addEventListener('beforeunload', () => {
+        sessionStorage.removeItem('rowsPerPageChoice');
+    });
 </script>
 </body>
 {% endblock %}
