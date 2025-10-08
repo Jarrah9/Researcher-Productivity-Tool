@@ -43,73 +43,129 @@
     max-height: 300px;
     overflow-y: auto;
   }
+  .db-table th, .db-table td { vertical-align: middle; }
 </style>
 {% endblock %} 
 {% block content %}
 <div class="admin-card">
   <h1 class="mb-4">Admin Dashboard</h1>
-  <div class="list-group mb-4">
-    <a href="/admin/download/researchers.csv" class="list-group-item list-group-item-action">
-      Download Master Spreadsheet
-    </a>
-  </div>
+  {% if flash %}
+    <div class="alert alert-info mt-3" role="alert">
+      {{ flash|safe }}
+    </div>
+  {% endif %}
   <div class="mb-4">
+    <h4>Database Management</h4>
+    <form action="/admin/download-db" method="post" class="mb-3">
+      <input type="hidden" name="db_name" value="{{ current_db }}">
+      <button type="submit" class="btn btn-outline-primary btn-sm">Download Current DB</button>
+    </form>
+
+    <table class="table db-table mb-3">
+      <thead>
+        <tr>
+          <th>#</th>
+          <th>Name</th>
+          <th></th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for db in db_list %}
+        <tr>
+          <td>{{ loop.index }}</td>
+          <td>
+            {% if db == current_db %}
+              <strong>{{ db }}</strong> <span class="badge bg-primary">Current</span>
+            {% else %}
+              <form action="/admin/switch-db" method="post" class="m-0">
+                <input type="hidden" name="db_name" value="{{ db }}">
+                <button type="submit" class="btn btn-link p-0 align-baseline">{{ db }}</button>
+              </form>
+            {% endif %}
+          </td>
+          <td>
+            <form action="/admin/delete-db" method="post" style="display:inline;">
+              <input type="hidden" name="db_name" value="{{ db }}">
+              <button type="submit" class="btn btn-danger btn-sm" onclick="return confirm('Delete database {{ db }}?')">Delete</button>
+            </form>
+          </td>
+          <td>
+            <form action="/admin/rename-db" method="post" class="d-inline-flex align-items-center">
+              <input type="hidden" name="old_db_name" value="{{ db }}">
+              <input type="text" name="new_db_name" class="form-control form-control-sm me-1" placeholder="New name" style="width: 100px;" required>
+              <button type="submit" class="btn btn-secondary btn-sm">Rename</button>
+            </form>
+          </td>
+        </tr>
+        {% endfor %}
+        <tr>
+          <form action="/admin/switch-db" method="post" class="d-flex align-items-center">
+            <td colspan="2">
+              <input type="text" name="db_name" class="form-control" placeholder="New database name" required>
+            </td>
+            <td colspan="2">
+              <button type="submit" class="btn btn-success">Create</button>
+            </td>
+          </form>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="mb-4" data-current-db="{{ current_db }}">
     <h4>Upload CSV</h4>
-  <form action="/admin/edit-mode" method="post" style="display: {% if not request.session.get('edit_mode') %}block{% else %}none{% endif %}; margin-bottom: 16px;">
-    <button type="submit" class="btn btn-info">Enter Edit Mode</button>
-  </form>
-  <form action="/admin/exit-edit-mode" method="post" style="display: {% if request.session.get('edit_mode') %}block{% else %}none{% endif %}; margin-bottom: 16px;">
-    <button type="submit" class="btn btn-secondary">Exit Edit Mode</button>
-  </form>
-    <div style="display: {% if request.session.get('edit_mode') %}block{% else %}none{% endif %};">
+    <div>
+      <p>Note: the download button will download the data in the current selected database, this also doubles as required CSV template for uploads. You can have other columns in the CSV and they will be ignored.</p>
       <div class="mb-3">
         <h6>Master Spreadsheet</h6>
-        <form class="d-flex align-items-center mt-2" action="/admin/upload/master_csv" method="post" enctype="multipart/form-data">
+        <form class="d-flex align-items-center mt-2 upload-form" action="/admin/upload/master_csv" method="post" enctype="multipart/form-data">
           <input type="file" class="form-control me-2" name="master_csv" accept=".csv">
-          <button type="submit" class="btn btn-primary me-2">Upload Master CSV</button>
+          <button type="submit" class="btn btn-primary me-2">Upload</button>
+          <a href="/admin/download/researchers.csv" class="btn btn-link">Download</a>
         </form>
       </div>
       <div class="mb-3">
         <h6>ABDC Rankings</h6>
-        <form class="d-flex align-items-center" action="/admin/upload/abdc" method="post" enctype="multipart/form-data">
+        <form class="d-flex align-items-center upload-form" action="/admin/upload/abdc" method="post" enctype="multipart/form-data">
           <input type="file" class="form-control me-2" name="abdc_csv" accept=".csv">
           <button type="submit" class="btn btn-primary me-2">Upload</button>
           <a href="/admin/download/abdc_template.csv" class="btn btn-link">Download</a>
         </form>
       </div>
       <div class="mb-3">
-        <h6>UWA Staff to Field Mappings</h6>
-        <form class="d-flex align-items-center" action="/admin/upload/uwa_staff_field" method="post" enctype="multipart/form-data">
-          <input type="file" class="form-control me-2" name="uwa_staff_field_csv" accept=".csv">
-          <button type="submit" class="btn btn-primary me-2">Upload</button>
-          <a href="/admin/download/UWA_staff_field_template.csv" class="btn btn-link">Download</a>
-        </form>
-      </div>
-      <div class="mb-3">
         <h6>Clarivate Rankings</h6>
-        <form class="d-flex align-items-center" action="/admin/upload/clarivate" method="post" enctype="multipart/form-data">
+        <form class="d-flex align-items-center upload-form" action="/admin/upload/clarivate" method="post" enctype="multipart/form-data">
           <input type="file" class="form-control me-2" name="clarivate_csv" accept=".csv">
           <button type="submit" class="btn btn-primary me-2">Upload</button>
           <a href="/admin/download/clarivate_template.csv" class="btn btn-link">Download</a>
         </form>
-        <button id="show-issn-batches" class="btn btn-secondary mt-2" type="button">Show ISSN Batches</button>
-        <div id="issn-batches-content">{% if issn_batches_content %}{{ issn_batches_content }}{% endif %}</div>
       </div>
-    </div>
-    <div style="display: {% if not request.session.get('edit_mode') %}block{% else %}none{% endif %};">
-      <div class="alert alert-warning mt-3" role="alert">
-        Upload functionality is disabled. Click "Enter Edit Mode" to enable uploads.
+      <div class="mb-3">
+        <h6>Researchers</h6>
+        <form class="d-flex align-items-center upload-form" action="/admin/upload/researchers" method="post" enctype="multipart/form-data">
+          <input type="file" class="form-control me-2" name="researchers_csv" accept=".csv">
+          <button type="submit" class="btn btn-primary me-2">Upload</button>
+          <a href="/admin/download/researchers_template.csv" class="btn btn-link">Download</a>
+        </form>
       </div>
+      <div class="mb-3">
+        <h6>Publications</h6>
+        <form class="d-flex align-items-center upload-form" action="/admin/upload/publications" method="post" enctype="multipart/form-data">
+          <input type="file" class="form-control me-2" name="publications_csv" accept=".csv">
+          <button type="submit" class="btn btn-primary me-2">Upload</button>
+          <a href="/admin/download/publications_template.csv" class="btn btn-link">Download</a>
+        </form>
     </div>
   </div>
-  {% if flash %}
-    <div class="alert alert-info mt-3" role="alert">
-      {{ flash|safe }}
-    </div>
-  {% endif %}
+  <div class="mb-4">
+    <h4>ISSN Batches</h4>
+    <p>Use this utility to print batches of 600 ISSNs separated by ; to paste into the clarivate filter to get JIF, 5 year JIF and % Citation.</p>
+    <button id="show-issn-batches" class="btn btn-secondary mt-2" type="button">Show ISSN Batches</button>
+    <div id="issn-batches-content">{% if issn_batches_content %}{{ issn_batches_content }}{% endif %}</div>
+  </div>
   <!-- This is the section for running the scraper -->
   <div class="mt-4">
-    <h4>Run Scraper</h4>
+    <h4>Run Scraper (Depreciated)</h4>
     <button id="run-scraper" class="btn btn-warning">Run Scraper</button>
     <div class="progress mt-2" style="display: none">
       <div
@@ -251,5 +307,19 @@
         });
     }
   });
+  (function() {
+    var uploadSection = document.querySelector('[data-current-db]');
+    if (!uploadSection) return;
+    var currentDb = (uploadSection.dataset.currentDb || '').trim().toLowerCase();
+    if (currentDb !== 'main') return;
+    var forms = uploadSection.querySelectorAll('form.upload-form');
+    forms.forEach(function(form) {
+      form.addEventListener('submit', function(evt) {
+        if (!confirm('You are uploading to the "main" database. Are you sure you want to continue?')) {
+          evt.preventDefault();
+        }
+      });
+    });
+  })();
 </script>
 {% endblock %}

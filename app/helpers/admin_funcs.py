@@ -183,13 +183,13 @@ def download_clarivate_template():
     headers = {"Content-Disposition": f'attachment; filename="{filename}"'}
     return StreamingResponse(csv_iter(), media_type="text/csv", headers=headers)
 
-def download_UWA_staff_field_template():
+def download_researchers_template():
     """
-    Streams a CSV of current UWA staff fields with the correct template columns.
+    Streams a CSV of the Researchers table with appropriate headers.
     """
     db: Session = SessionLocal()
-    header = ["Name", "Field"]
-    researchers = db.query(Researchers).filter(Researchers.university == "UWA").all()
+    header = ["Researcher ID", "Name", "University", "Profile URL", "Job Title", "Level", "Field"]
+    researchers = db.query(Researchers).all()
 
     def csv_iter():
         buf = io.StringIO()
@@ -199,7 +199,12 @@ def download_UWA_staff_field_template():
         buf.seek(0); buf.truncate(0)
         for researcher in researchers:
             row = [
+                researcher.id if researcher.id is not None else "",
                 researcher.name or "",
+                researcher.university or "",
+                researcher.profile_url or "",
+                researcher.job_title or "",
+                researcher.level or "",
                 researcher.field or ""
             ]
             writer.writerow(row)
@@ -208,7 +213,45 @@ def download_UWA_staff_field_template():
         db.close()
 
     ts = datetime.datetime.now().strftime("%Y-%m-%d")
-    filename = f"UWA_staff_field_current_{ts}.csv"
+    filename = f"researchers_current_{ts}.csv"
+    headers = {"Content-Disposition": f'attachment; filename="{filename}"'}
+    return StreamingResponse(csv_iter(), media_type="text/csv", headers=headers)
+
+def download_publications_template():
+    """
+    Streams a CSV of the Publications table with appropriate headers.
+    """
+    db: Session = SessionLocal()
+    header = [
+        "Publication ID", "Title", "Year", "Publication Type", 
+        "Publication URL", "Journal Name", "Researcher ID", "Journal ID"
+    ]
+    publications = db.query(Publications).all()
+
+    def csv_iter():
+        buf = io.StringIO()
+        writer = csv.writer(buf)
+        writer.writerow(header)
+        yield buf.getvalue()
+        buf.seek(0); buf.truncate(0)
+        for pub in publications:
+            row = [
+                pub.id if pub.id is not None else "",
+                pub.title or "",
+                pub.year if pub.year is not None else "",
+                pub.publication_type or "",
+                pub.publication_url or "",
+                pub.journal_name or "",
+                pub.researcher_id if pub.researcher_id is not None else "",
+                pub.journal_id if pub.journal_id is not None else ""
+            ]
+            writer.writerow(row)
+            yield buf.getvalue()
+            buf.seek(0); buf.truncate(0)
+        db.close()
+
+    ts = datetime.datetime.now().strftime("%Y-%m-%d")
+    filename = f"publications_current_{ts}.csv"
     headers = {"Content-Disposition": f'attachment; filename="{filename}"'}
     return StreamingResponse(csv_iter(), media_type="text/csv", headers=headers)
 
@@ -275,17 +318,75 @@ def import_clarivate(jif_csv_path):
     finally:
         session.close()
 
-def update_UWA_staff_fields(file_path="app/files/uploads_current/UWA_staff_field_upload.csv"):
-    df = pd.read_csv(file_path)
-    # Strip whitespace from column names and values
+def update_researchers(file_path="app/files/uploads_current/researchers_upload.csv"):
+    """
+    Replaces all records in the Researchers table with those provided in the CSV.
+    Expected headers:
+    ["Researcher ID", "Name", "University", "Profile URL", "Job Title", "Level", "Field"]
+    """
+    required_headers = [
+        "Researcher ID", "Name", "University", "Profile URL", "Job Title", "Level", "Field"
+    ]
+    df = pd.read_csv(file_path, dtype=str)
     df.columns = [col.strip() for col in df.columns]
+    missing = [col for col in required_headers if col not in df.columns]
+    if missing:
+        raise ValueError(f"Missing required columns: {', '.join(missing)}")
+    df = df[required_headers].fillna("")
 
     session = SessionLocal()
     try:
+        session.query(Researchers).delete()
+        session.commit()
         for _, row in df.iterrows():
-            researcher = session.query(Researchers).filter_by(name=row['Name']).first()
-            if researcher:
-                researcher.field = row['Field']
+            researcher = Researchers(
+                id=int(row["Researcher ID"]) if str(row["Researcher ID"]).strip() else None,
+                name=row["Name"],
+                university=row["University"],
+                profile_url=row["Profile URL"] or None,
+                job_title=row["Job Title"] or None,
+                level=row["Level"] or None,
+                field=row["Field"] or None
+            )
+            session.add(researcher)
+        session.commit()
+    finally:
+        session.close()
+
+def update_publications(file_path="app/files/uploads_current/publications_upload.csv"):
+    """
+    Replaces all records in the Publications table with those provided in the CSV.
+    Expected headers:
+    ["Publication ID", "Title", "Year", "Publication Type", 
+     "Publication URL", "Journal Name", "Researcher ID", "Journal ID"]
+    """
+    required_headers = [
+        "Publication ID", "Title", "Year", "Publication Type", 
+        "Publication URL", "Journal Name", "Researcher ID", "Journal ID"
+    ]
+    df = pd.read_csv(file_path, dtype=str)
+    df.columns = [col.strip() for col in df.columns]
+    missing = [col for col in required_headers if col not in df.columns]
+    if missing:
+        raise ValueError(f"Missing required columns: {', '.join(missing)}")
+    df = df[required_headers].fillna("")
+
+    session = SessionLocal()
+    try:
+        session.query(Publications).delete()
+        session.commit()
+        for _, row in df.iterrows():
+            pub = Publications(
+                id=int(row["Publication ID"]) if str(row["Publication ID"]).strip() else None,
+                title=row["Title"],
+                year=int(row["Year"]) if str(row["Year"]).strip() else None,
+                publication_type=row["Publication Type"] or None,
+                publication_url=row["Publication URL"] or None,
+                journal_name=row["Journal Name"] or None,
+                researcher_id=int(row["Researcher ID"]) if str(row["Researcher ID"]).strip() else None,
+                journal_id=int(row["Journal ID"]) if str(row["Journal ID"]).strip() else None
+            )
+            session.add(pub)
         session.commit()
     finally:
         session.close()
@@ -406,8 +507,7 @@ def reupload_master_spreadsheet(file_path="app/files/uploads_current/master_spre
 def switch_db(db_name):
     """
     Switches the database URL and reloads SQLAlchemy engine/session.
-    If switching to a new db (not 'main'), copy main.db to the new db if it doesn't exist.
-    If switching back to 'main', delete the edit db if it exists.
+    If the specified db does not exist, create it as a copy of main.db.
     Prints the current DB URL after switching.
     """
     from shutil import copyfile
@@ -416,20 +516,102 @@ def switch_db(db_name):
     main_db_path = project_dir / "app" / "main.db"
     target_db_path = project_dir / "app" / f"{db_name}.db"
 
-    # If switching to edit db, copy main.db if edit db doesn't exist
-    if db_name != "main":
-        if not target_db_path.exists() and main_db_path.exists():
+    # Always create the db if it doesn't exist, as a copy of main.db
+    if not target_db_path.exists():
+        if main_db_path.exists():
             copyfile(main_db_path, target_db_path)
-    else:
-        # If switching back to main, delete edit db if it exists
-        edit_db_path = project_dir / "app" / "edit_master.db"
-        if edit_db_path.exists():
-            edit_db_path.unlink()
+        else:
+            raise FileNotFoundError(f"main.db not found at {main_db_path}")
 
     # Attempt to reload SQLAlchemy engine/session
     try:
         from app import database
         database.reload_engine(db_name)
+        database.CURRENT_DB_NAME = db_name
     except Exception as e:
         print(f"Warning: Could not reload SQLAlchemy engine automatically. Please restart the server. Error: {e}")
+
+    os.environ["DATABASE_NAME"] = db_name
+    with open("db_list.txt", "w") as f:
+        f.write(db_name)
     return f"Switched to {db_name}.db"
+
+def delete_db(db_name):
+    """
+    Deletes the specified database file and removes it from db_list.txt.
+    """
+    script_dir = Path(__file__).resolve().parent
+    project_dir = script_dir.parents[1]
+    db_path = project_dir / "app" / f"{db_name}.db"
+
+    # Delete the database file if it exists
+    if db_path.exists():
+        db_path.unlink()
+    print(f"Deleted {db_name}.db")
+
+def rename_db(old_db_name, new_db_name):
+    """
+    Renames a database file in the app/ directory by copying it to a new file first,
+    then removing the original. This allows renaming even when the database is active.
+    """
+    from shutil import copyfile
+    script_dir = Path(__file__).resolve().parent
+    project_dir = script_dir.parents[1]
+    old_path = project_dir / "app" / f"{old_db_name}.db"
+    new_path = project_dir / "app" / f"{new_db_name}.db"
+    db_list_path = project_dir / "app" / "db_list.txt"
+
+    if not old_path.exists():
+        raise FileNotFoundError(f"{old_db_name}.db not found.")
+    if new_path.exists():
+        raise FileExistsError(f"{new_db_name}.db already exists.")
+
+    copyfile(old_path, new_path)
+
+    current_db = os.getenv("DATABASE_NAME")
+    db_module = None
+    try:
+        from app import database as db_module
+        module_current = getattr(db_module, "CURRENT_DB_NAME", None)
+        current_db = module_current or current_db
+    except Exception:
+        pass
+
+    is_current = (current_db == old_db_name)
+
+    if is_current and db_module:
+        try:
+            db_module.reload_engine(new_db_name)
+            db_module.CURRENT_DB_NAME = new_db_name
+        except Exception as e:
+            print(f"Warning: Engine reload failed when renaming database. Error: {e}")
+
+    if os.getenv("DATABASE_NAME") == old_db_name:
+        os.environ["DATABASE_NAME"] = new_db_name
+
+    try:
+        old_path.unlink()
+    except Exception as e:
+        print(f"Warning: Could not delete {old_db_name}.db after renaming. Error: {e}")
+
+    if db_list_path.exists():
+        with open(db_list_path, "r") as f:
+            dbs = [line.strip() for line in f if line.strip()]
+    else:
+        dbs = []
+
+    updated = []
+    seen = set()
+    for name in dbs:
+        replacement = new_db_name if name == old_db_name else name
+        if replacement not in seen:
+            updated.append(replacement)
+            seen.add(replacement)
+    if new_db_name not in seen:
+        updated.append(new_db_name)
+
+    with open(db_list_path, "w") as f:
+        for name in updated:
+            f.write(f"{name}\n")
+
+    print(f"Renamed {old_db_name}.db to {new_db_name}.db")

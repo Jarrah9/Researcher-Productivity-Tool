@@ -32,3 +32,105 @@ Nowadays, researchers in top universities are required to complete their researc
     - https://digital.library.adelaide.edu.au/browse/author?scope=9952f540-778a-45dd-a309-6604e8753669 (Business)
     - https://business.adelaide.edu.au/research/accounting#lead-researchers (lead accounting reasearchers)
     - https://business.adelaide.edu.au/research/finance-and-business-analytics (finance and business analytics staff members)
+
+## Deployment Documentation
+
+### 1. Prerequisites
+- Ubuntu 22.04 EC2 instance with inbound SSH (22) and HTTP (80) open.
+- An SSH private key (`r_tool.pem`) that allows login as `ubuntu`.
+- Local machine with `ssh`, `rsync`, and Python 3.10+ installed.
+
+### 2. Sync Project to EC2
+```bash
+# On local machine
+chmod 400 r_tool.pem
+ssh -i r_tool.pem ubuntu@<SERVER IP>
+rsync -avz -e "ssh -i r_tool.pem" --delete Project/ ubuntu@<SERVER IP>:~/deploy
+```
+
+### 3. Install Runtime Dependencies (on EC2)
+```bash
+sudo apt update
+sudo apt install -y python3-venv python3-pip
+wget https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb
+sudo apt install ./google-chrome-stable_current_amd64.deb -y
+sudo apt install -y chromium-chromedriver
+sudo apt install xvfb
+```
+
+### 4. Create Virtual Environment & Install Packages
+```bash
+cd ~/deploy
+python3 -m venv deployment-venv
+source deployment-venv/bin/activate
+pip install -r requirements.txt
+```
+
+### 5. Configure Apache Reverse Proxy
+```bash
+sudo apt install apache2 libapache2-mod-proxy-uwsgi
+sudo a2enmod proxy
+sudo a2enmod proxy_http
+```
+Create `/etc/apache2/sites-available/fastapi.conf`:
+```apache
+<VirtualHost *:80>
+    ServerName your-domain.com
+
+    ProxyPreserveHost On
+    ProxyPass / http://127.0.0.1:8000/
+    ProxyPassReverse / http://127.0.0.1:8000/
+
+    ErrorLog ${APACHE_LOG_DIR}/fastapi_error.log
+    CustomLog ${APACHE_LOG_DIR}/fastapi_access.log combined
+</VirtualHost>
+```
+Enable site and restart Apache:
+```bash
+sudo a2ensite fastapi.conf
+sudo systemctl restart apache2
+```
+
+### 6. Create systemd Service for Uvicorn
+Create `/etc/systemd/system/fastapi.service`:
+```ini
+[Unit]
+Description=FastAPI app
+After=network.target
+
+[Service]
+User=ubuntu
+WorkingDirectory=/home/ubuntu/deploy
+ExecStart=/home/ubuntu/deployment-venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 8000
+Restart=always
+
+[Install]
+WantedBy=multi-user.target
+```
+Enable service:
+```bash
+sudo systemctl daemon-reload
+sudo systemctl enable fastapi
+sudo systemctl start fastapi
+```
+### 7. Run Application
+```bash
+nohup xvfb-run -a uvicorn app.main:app --host 127.0.0.1 --port 8000
+```
+- Check logs in `nohup.out`.
+- To stop, list processes with `ps aux | grep uvicorn` and `kill <PID>`.
+
+### 8. Maintenance Commands
+- Check service status: `sudo systemctl status fastapi`
+- Restart app after deploy: `sudo systemctl restart fastapi`
+- Tail Apache logs:
+  ```bash
+  sudo tail -f /var/log/apache2/fastapi_error.log
+  sudo tail -f /var/log/apache2/fastapi_access.log
+  ```
+- Update code:
+  ```bash
+  rsync -avz -e "ssh -i r_tool.pem" --delete Project/ ubuntu@3.25.59.145:~/deploy
+  ssh -i r_tool.pem ubuntu@3.25.59.145 "sudo systemctl restart fastapi"
+  ```
+

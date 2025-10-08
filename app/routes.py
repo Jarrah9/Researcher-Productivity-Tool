@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Request, Path, UploadFile, File
-from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
+from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse, FileResponse
 from fastapi.templating import Jinja2Templates
 from contextlib import redirect_stdout
 from app.scrapers.update import update_all
@@ -12,11 +12,13 @@ from app.helpers.admin_funcs import (
     download_master_csv,
     download_ABDC_template,
     download_clarivate_template,
-    download_UWA_staff_field_template,
+    download_researchers_template,
+    download_publications_template,
     save_uploaded_file,
     replace_ABDC_rankings,
     import_clarivate,
-    update_UWA_staff_fields,
+    update_researchers,
+    update_publications,
     reupload_master_spreadsheet,
     switch_db
 )
@@ -26,6 +28,7 @@ import io
 import sys
 import threading
 import traceback
+import os
 
 router = APIRouter()
 templates = Jinja2Templates(directory="app/templates")
@@ -150,8 +153,72 @@ async def admin(request: Request):
     if not user:
         # Not logged in, redirect to login or show error
         return templates.TemplateResponse("login.html", {"request": request, "error": None})
-    return templates.TemplateResponse("admin.html", {"request": request, "user": user, "flash": flash})
+    # Find all .db files in app/ folder
+    from pathlib import Path
+    db_files = list(Path("app").glob("*.db"))
+    db_list = [f.stem for f in db_files]
 
+    from app import database as db_module
+    env_db = os.getenv("DATABASE_NAME")
+    current_db = getattr(db_module, "CURRENT_DB_NAME", None) or env_db or "main"
+    if current_db not in db_list:
+        current_db = "main"
+
+    return templates.TemplateResponse(
+        "admin.html",
+        {
+            "request": request,
+            "user": user,
+            "flash": flash,
+            "db_list": db_list,
+            "current_db": current_db
+        }
+    )
+
+@router.post("/admin/switch-db")
+async def switch_db_route(request: Request):
+    form = await request.form()
+    db_name = form.get("db_name")
+    user = request.session.get("user")
+    if not user or not db_name:
+        return RedirectResponse(url="/", status_code=303)
+    switch_db(db_name)
+    global RESEARCHER_STATS_CACHE, UNIVERSITY_STATS_CACHE
+    RESEARCHER_STATS_CACHE = None  # Clear researcher cache to reflect updated data
+    UNIVERSITY_STATS_CACHE = None  # Clear university cache to reflect updated data
+    request.session["flash"] = f"Switched to database '{db_name}'."
+    return RedirectResponse(url="/admin", status_code=303)
+
+@router.post("/admin/delete-db")
+async def delete_db_route(request: Request):
+    form = await request.form()
+    db_name = form.get("db_name")
+    user = request.session.get("user")
+    if not user or not db_name:
+        return RedirectResponse(url="/", status_code=303)
+    from app.helpers.admin_funcs import delete_db
+    try:
+        delete_db(db_name)
+        request.session["flash"] = f"Database '{db_name}' deleted successfully."
+    except Exception as e:
+        request.session["flash"] = f"Error deleting database '{db_name}': {e}"
+    return RedirectResponse(url="/admin", status_code=303)
+
+@router.post("/admin/rename-db")
+async def rename_db_route(request: Request):
+    form = await request.form()
+    old_db_name = form.get("old_db_name")
+    new_db_name = form.get("new_db_name")
+    user = request.session.get("user")
+    if not user or not old_db_name or not new_db_name:
+        return RedirectResponse(url="/", status_code=303)
+    from app.helpers.admin_funcs import rename_db
+    try:
+        rename_db(old_db_name, new_db_name)
+        request.session["flash"] = f"Database '{old_db_name}' renamed to '{new_db_name}' successfully."
+    except Exception as e:
+        request.session["flash"] = f"Error renaming database '{old_db_name}': {e}"
+    return RedirectResponse(url="/admin", status_code=303)
 
 @router.post("/login")
 async def login_post(request: Request):
@@ -195,52 +262,37 @@ def clarivate_template_route():
     return download_clarivate_template()
 
 
-@router.get("/admin/download/UWA_staff_field_template.csv")
-def uwa_staff_field_template_route():
-    return download_UWA_staff_field_template()
+@router.get("/admin/download/researchers_template.csv")
+def researchers_template_route():
+    return download_researchers_template()
+
+@router.get("/admin/download/publications_template.csv")
+def publications_template_route():
+    return download_publications_template()
+
+@router.post("/admin/download-db")
+async def download_db_route(request: Request):
+    user = request.session.get("user")
+    if not user:
+        return RedirectResponse(url="/", status_code=303)
+    form = await request.form()
+    db_name = form.get("db_name")
+    from pathlib import Path
+    db_path = Path("app") / f"{db_name}.db"
+    if not db_path.exists():
+        request.session["flash"] = f"Database '{db_name}' not found."
+        return RedirectResponse(url="/admin", status_code=303)
+    return FileResponse(path=db_path, filename=f"{db_name}.db", media_type="application/octet-stream")
 
 # ------------------------
 # Admin Upload Functionalities
 # ------------------------
-
-@router.post("/admin/edit-mode")
-async def enter_edit_mode(request: Request):
-    user = request.session.get("user")
-    if not user:
-        return RedirectResponse(url="/", status_code=303)
-    # Switch to edit DB (e.g., "edit_master")
-    switch_db("edit_master")
-    global RESEARCHER_STATS_CACHE, UNIVERSITY_STATS_CACHE
-    RESEARCHER_STATS_CACHE = None  # Clear researcher cache to reflect updated data
-    UNIVERSITY_STATS_CACHE = None  # Clear university cache to reflect updated data
-    request.session["edit_mode"] = True
-    request.session["flash"] = "Edit mode enabled. You may now upload and modify data. Changes will persist until you exit edit mode."
-    return RedirectResponse(url="/admin", status_code=303)
-
-@router.post("/admin/exit-edit-mode")
-async def exit_edit_mode(request: Request):
-    user = request.session.get("user")
-    if not user:
-        return RedirectResponse(url="/", status_code=303)
-    # Switch back to main DB (e.g., "main")
-    switch_db("main")
-    global RESEARCHER_STATS_CACHE, UNIVERSITY_STATS_CACHE
-    RESEARCHER_STATS_CACHE = None  # Clear researcher cache to reflect updated data
-    UNIVERSITY_STATS_CACHE = None  # Clear university cache to reflect updated data
-    request.session["edit_mode"] = False
-    request.session["flash"] = "Edit mode exited. Changes are now saved to the main database."
-    return RedirectResponse(url="/admin", status_code=303)
 
 @router.post("/admin/upload/master_csv")
 async def upload_master_csv(
     request: Request,
     master_csv: UploadFile = File(None)
 ):
-    if not request.session.get("edit_mode"):
-        return templates.TemplateResponse(
-            "admin.html",
-            {"request": request, "user": request.session.get("user"), "error": "You must enable edit mode to upload."}
-        )
     if not master_csv:
         return templates.TemplateResponse(
             "admin.html",
@@ -249,10 +301,12 @@ async def upload_master_csv(
     file_path = save_uploaded_file(master_csv, "master_spreadsheet_upload.csv")
     # Flash message
     request.session["flash"] = (
-        f"File '{master_csv.filename}' uploaded successfully.<br>"
-        "The website will be temporarily unavailable while the CSV file is being processed."
+        f"File '{master_csv.filename}' uploaded successfully."
     )
-    reupload_master_spreadsheet(file_path)
+    try:
+        reupload_master_spreadsheet(file_path)
+    except:
+        request.session["flash"] += f" However, there was an error processing the file. Please ensure it is correctly formatted."
     global RESEARCHER_STATS_CACHE, UNIVERSITY_STATS_CACHE
     RESEARCHER_STATS_CACHE = None  # Clear researcher cache to reflect updated data
     UNIVERSITY_STATS_CACHE = None  # Clear university cache to reflect updated data
@@ -263,11 +317,6 @@ async def upload_abdc(
     request: Request,
     abdc_csv: UploadFile = File(None)
 ):
-    if not request.session.get("edit_mode"):
-        return templates.TemplateResponse(
-            "admin.html",
-            {"request": request, "user": request.session.get("user"), "error": "You must enable edit mode to upload."}
-        )
     if not abdc_csv:
         return templates.TemplateResponse(
             "admin.html",
@@ -276,10 +325,12 @@ async def upload_abdc(
     file_path = save_uploaded_file(abdc_csv, "ABDC_upload.csv")
     # Flash message
     request.session["flash"] = (
-        f"File '{abdc_csv.filename}' uploaded successfully.<br>"
-        "The website will be temporarily unavailable while the CSV file is being processed."
+        f"File '{abdc_csv.filename}' uploaded successfully."
     )
-    replace_ABDC_rankings(file_path)
+    try:
+        replace_ABDC_rankings(file_path)
+    except Exception as e:
+        request.session["flash"] += f" However, there was an error processing the file. Please ensure it is correctly formatted."
     try:
         import_clarivate("/app/files/uploads_current/clarivate_upload.csv")  # Re-import all JIF data to refresh journal matches
     except Exception as e:
@@ -295,11 +346,6 @@ async def upload_clarivate(
     request: Request,
     clarivate_csv: UploadFile = File(None)
 ):
-    if not request.session.get("edit_mode"):
-        return templates.TemplateResponse(
-            "admin.html",
-            {"request": request, "user": request.session.get("user"), "error": "You must enable edit mode to upload."}
-        )
     if not clarivate_csv:
         return templates.TemplateResponse(
             "admin.html",
@@ -311,34 +357,60 @@ async def upload_clarivate(
     request.session["flash"] = (
         f"File '{clarivate_csv.filename}' uploaded successfully"
     )
-    import_clarivate(file_path)
+    try:
+        import_clarivate(file_path)
+    except Exception as e:
+        request.session["flash"] += f" However, there was an error processing the file. Please ensure it is correctly formatted."
     global RESEARCHER_STATS_CACHE, UNIVERSITY_STATS_CACHE
     RESEARCHER_STATS_CACHE = None  # Clear researcher cache to reflect updated journal data
     UNIVERSITY_STATS_CACHE = None  # Clear university cache to reflect updated journal data
     return RedirectResponse(url="/admin", status_code=303)
 
-@router.post("/admin/upload/uwa_staff_field")
-async def upload_uwa_staff_field(
+@router.post("/admin/upload/researchers")
+async def upload_researchers(
     request: Request,
-    uwa_staff_field_csv: UploadFile = File(None)
+    researchers_csv: UploadFile = File(None)
 ):
-    if not request.session.get("edit_mode"):
-        return templates.TemplateResponse(
-            "admin.html",
-            {"request": request, "user": request.session.get("user"), "error": "You must enable edit mode to upload."}
-        )
-    if not uwa_staff_field_csv:
+    if not researchers_csv:
         return templates.TemplateResponse(
             "admin.html",
             {"request": request, "user": request.session.get("user"), "error": "No file uploaded."}
         )
     # Save the uploaded file
-    file_path = save_uploaded_file(uwa_staff_field_csv, "UWA_staff_field_upload.csv")
+    file_path = save_uploaded_file(researchers_csv, "researchers_upload.csv")
     # Flash message
     request.session["flash"] = (
-        f"File '{uwa_staff_field_csv.filename}' uploaded successfully."
+        f"File '{researchers_csv.filename}' uploaded successfully."
     )
-    update_UWA_staff_fields(file_path)
+    try:
+        update_researchers(file_path)
+    except Exception as e:
+        request.session["flash"] += f" However, there was an error processing the file. Please ensure it is correctly formatted."
+    global RESEARCHER_STATS_CACHE, UNIVERSITY_STATS_CACHE
+    RESEARCHER_STATS_CACHE = None  # Clear researcher cache to reflect updated journal data
+    UNIVERSITY_STATS_CACHE = None  # Clear university cache to reflect updated journal data
+    return RedirectResponse(url="/admin", status_code=303)
+
+@router.post("/admin/upload/publications")
+async def upload_publications(
+    request: Request,
+    publications_csv: UploadFile = File(None)
+):
+    if not publications_csv:
+        return templates.TemplateResponse(
+            "admin.html",
+            {"request": request, "user": request.session.get("user"), "error": "No file uploaded."}
+        )
+    # Save the uploaded file
+    file_path = save_uploaded_file(publications_csv, "publications_upload.csv")
+    # Flash message
+    request.session["flash"] = (
+        f"File '{publications_csv.filename}' uploaded successfully."
+    )
+    try:
+        update_publications(file_path)
+    except Exception as e:
+        request.session["flash"] += f" However, there was an error processing the file. Please ensure it is correctly formatted."
     global RESEARCHER_STATS_CACHE, UNIVERSITY_STATS_CACHE
     RESEARCHER_STATS_CACHE = None  # Clear researcher cache to reflect updated journal data
     UNIVERSITY_STATS_CACHE = None  # Clear university cache to reflect updated journal data
