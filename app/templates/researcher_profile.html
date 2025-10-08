@@ -109,6 +109,19 @@
         <div style="font-size: 0.85em; color: #555; margin-bottom: 1px;">
             Note: <b>Shift+Click</b> column headers for secondary sorting etc.
         </div>
+                <form method="get" style="margin-bottom: 16px;">
+            <label style="display: flex; align-items: center; gap: 10px; font-weight: normal; font-size: 1.05em;">
+                <input 
+                    type="checkbox" 
+                    name="abdc_only" 
+                    value="true"
+                    {% if abdc_only %}checked{% endif %} 
+                    onchange="this.form.submit()"
+                    style="transform: scale(1.5); accent-color: #1976d2; cursor: pointer;"
+                />
+                Only show ABDC ranked
+            </label>
+        </form>
         <button id="clearSortBtn" style="display: flex; flex-direction: column; align-items: flex-end;">Clear Sorting</button>
     </div>
 
@@ -200,6 +213,30 @@
         rows.forEach(tr => tr.style.display = 'none');
         showPage(1);
     });
+    
+    function applyFilters() {
+    const q = document.getElementById('searchInput').value.toLowerCase();
+    const abdcOnly = document.getElementById('abdcCheckbox').checked;
+
+    filteredRows = rows.filter(tr => {
+        const textMatch = tr.textContent.toLowerCase().includes(q);
+
+        const abdcRank = getCellText(tr, 3).trim().toLowerCase();
+
+        console.log("ABDC:", abdcRank);
+
+        const validRanks = ['a*', 'a', 'b', 'c', 'd'];
+        const hasRanking = validRanks.includes(abdcRank);
+
+        return abdcOnly ? textMatch && hasRanking : textMatch;
+    });
+
+    rows.forEach(tr => tr.style.display = 'none');
+    showPage(1);
+}
+
+document.getElementById('searchInput').addEventListener('input', applyFilters);
+document.getElementById('abdcCheckbox').addEventListener('change', applyFilters);
 
     // Multi-column sorting
     const sortOrder = [];

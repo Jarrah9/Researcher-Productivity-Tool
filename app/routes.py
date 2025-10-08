@@ -109,10 +109,24 @@ def researchers(request: Request):
 @router.get("/researchers/{researcher_id}", response_class=HTMLResponse)
 def researcher_profile(request: Request, researcher_id: int = Path(...)):
     researcher_data, pub_list = get_researcher_profile(researcher_id)
+
+    # Get filter state from query param
+    abdc_only = request.query_params.get("abdc_only", "false").lower() == "true"
+
+    if abdc_only:
+        # Only include articles with a non-empty ABDC ranking
+        pub_list = [pub for pub in pub_list if pub.get("ranking")]
+
     return templates.TemplateResponse(
         "researcher_profile.html",
-        {"request": request, "researcher": researcher_data, "publications": pub_list},
+        {
+            "request": request,
+            "researcher": researcher_data,
+            "publications": pub_list,
+            "abdc_only": abdc_only  
+        }
     )
+
 
 
 # ------------------------
