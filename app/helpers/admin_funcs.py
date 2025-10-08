@@ -406,8 +406,7 @@ def reupload_master_spreadsheet(file_path="app/files/uploads_current/master_spre
 def switch_db(db_name):
     """
     Switches the database URL and reloads SQLAlchemy engine/session.
-    If switching to a new db (not 'main'), copy main.db to the new db if it doesn't exist.
-    If switching back to 'main', delete the edit db if it exists.
+    If the specified db does not exist, create it as a copy of main.db.
     Prints the current DB URL after switching.
     """
     from shutil import copyfile
@@ -416,23 +415,39 @@ def switch_db(db_name):
     main_db_path = project_dir / "app" / "main.db"
     target_db_path = project_dir / "app" / f"{db_name}.db"
 
-    # If switching to edit db, copy main.db if edit db doesn't exist
-    if db_name != "main":
-        if not target_db_path.exists() and main_db_path.exists():
+    # Always create the db if it doesn't exist, as a copy of main.db
+    if not target_db_path.exists():
+        if main_db_path.exists():
             copyfile(main_db_path, target_db_path)
-    else:
-        # If switching back to main, delete edit db if it exists
-        edit_db_path = project_dir / "app" / "edit_master.db"
-        if edit_db_path.exists():
-            edit_db_path.unlink()
+        else:
+            raise FileNotFoundError(f"main.db not found at {main_db_path}")
 
     # Attempt to reload SQLAlchemy engine/session
     try:
         from app import database
         database.reload_engine(db_name)
+        database.CURRENT_DB_NAME = db_name
     except Exception as e:
         print(f"Warning: Could not reload SQLAlchemy engine automatically. Please restart the server. Error: {e}")
+
+    os.environ["DATABASE_NAME"] = db_name
+    with open("db_list.txt", "w") as f:
+        f.write(db_name)
     return f"Switched to {db_name}.db"
 
+def delete_db(db_name):
+    """
+    Deletes the specified database file and removes it from db_list.txt.
+    """
+    script_dir = Path(__file__).resolve().parent
+    project_dir = script_dir.parents[1]
+    db_path = project_dir / "app" / f"{db_name}.db"
+    db_list_path = project_dir / "app" / "db_list.txt"
+
+    # Delete the database file if it exists
+    if db_path.exists():
+        db_path.unlink()
+
+    print(f"Deleted {db_name}.db")
 if __name__ == "__main__":
     update_UWA_staff_fields("app/files/UWA_staff_field_mapping_original.csv")

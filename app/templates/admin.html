@@ -43,25 +43,73 @@
     max-height: 300px;
     overflow-y: auto;
   }
+  .db-table th, .db-table td { vertical-align: middle; }
 </style>
 {% endblock %} 
 {% block content %}
 <div class="admin-card">
   <h1 class="mb-4">Admin Dashboard</h1>
   <div class="mb-4">
-    <h4>Database Selection</h4>
+    <h4>Database Management</h4>
+    <table class="table db-table mb-3">
+      <thead>
+        <tr>
+          <th>#</th>
+          <th>Name</th>
+          <th></th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for db in db_list %}
+        <tr>
+          <td>{{ loop.index }}</td>
+          <td>
+            {% if db == current_db %}
+              <strong>{{ db }}</strong> <span class="badge bg-primary">Current</span>
+            {% else %}
+              {{ db }}
+            {% endif %}
+          </td>
+          <td>
+            {% if db != current_db %}
+            <form action="/admin/delete-db" method="post" style="display:inline;">
+              <input type="hidden" name="db_name" value="{{ db }}">
+              <button type="submit" class="btn btn-danger btn-sm" onclick="return confirm('Delete database {{ db }}?')">Delete</button>
+            </form>
+            {% endif %}
+          </td>
+          <td>
+            {% if db != current_db %}
+            <form action="/admin/rename-db" method="post" class="d-inline-flex align-items-center">
+              <input type="hidden" name="old_db_name" value="{{ db }}">
+              <input type="text" name="new_db_name" class="form-control form-control-sm me-1" placeholder="New name" style="width: 100px;" required>
+              <button type="submit" class="btn btn-secondary btn-sm">Rename</button>
+            </form>
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+        <tr>
+          <form action="/admin/create-db" method="post" class="d-flex align-items-center">
+            <td colspan="2">
+              <input type="text" name="new_db_name" class="form-control" placeholder="New database name" required>
+            </td>
+            <td colspan="2">
+              <button type="submit" class="btn btn-success">Create</button>
+            </td>
+          </form>
+        </tr>
+      </tbody>
+    </table>
     <form action="/admin/switch-db" method="post" class="d-flex align-items-center mb-3">
-      <label for="db-select" class="me-2">Current Database:</label>
+      <label for="db-select" class="me-2">Switch to:</label>
       <select id="db-select" name="db_name" class="form-select me-2" style="width: auto;">
         {% for db in db_list %}
           <option value="{{ db }}" {% if db == current_db %}selected{% endif %}>{{ db }}</option>
         {% endfor %}
       </select>
       <button type="submit" class="btn btn-primary me-2">Switch</button>
-    </form>
-    <form action="/admin/create-db" method="post" class="d-flex align-items-center mb-3">
-      <input type="text" name="new_db_name" class="form-control me-2" placeholder="New database name" required>
-      <button type="submit" class="btn btn-success">Create</button>
     </form>
   </div>
   <div class="mb-4">
