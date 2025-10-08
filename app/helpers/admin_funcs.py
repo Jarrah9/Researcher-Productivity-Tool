@@ -183,13 +183,13 @@ def download_clarivate_template():
     headers = {"Content-Disposition": f'attachment; filename="{filename}"'}
     return StreamingResponse(csv_iter(), media_type="text/csv", headers=headers)
 
-def download_UWA_staff_field_template():
+def download_researchers_template():
     """
-    Streams a CSV of current UWA staff fields with the correct template columns.
+    Streams a CSV of the Researchers table with appropriate headers.
     """
     db: Session = SessionLocal()
-    header = ["Name", "Field"]
-    researchers = db.query(Researchers).filter(Researchers.university == "UWA").all()
+    header = ["Researcher ID", "Name", "University", "Profile URL", "Job Title", "Level", "Field"]
+    researchers = db.query(Researchers).all()
 
     def csv_iter():
         buf = io.StringIO()
@@ -199,7 +199,12 @@ def download_UWA_staff_field_template():
         buf.seek(0); buf.truncate(0)
         for researcher in researchers:
             row = [
+                researcher.id if researcher.id is not None else "",
                 researcher.name or "",
+                researcher.university or "",
+                researcher.profile_url or "",
+                researcher.job_title or "",
+                researcher.level or "",
                 researcher.field or ""
             ]
             writer.writerow(row)
@@ -208,7 +213,45 @@ def download_UWA_staff_field_template():
         db.close()
 
     ts = datetime.datetime.now().strftime("%Y-%m-%d")
-    filename = f"UWA_staff_field_current_{ts}.csv"
+    filename = f"researchers_current_{ts}.csv"
+    headers = {"Content-Disposition": f'attachment; filename="{filename}"'}
+    return StreamingResponse(csv_iter(), media_type="text/csv", headers=headers)
+
+def download_publications_template():
+    """
+    Streams a CSV of the Publications table with appropriate headers.
+    """
+    db: Session = SessionLocal()
+    header = [
+        "Publication ID", "Title", "Year", "Publication Type", 
+        "Publication URL", "Journal Name", "Researcher ID", "Journal ID"
+    ]
+    publications = db.query(Publications).all()
+
+    def csv_iter():
+        buf = io.StringIO()
+        writer = csv.writer(buf)
+        writer.writerow(header)
+        yield buf.getvalue()
+        buf.seek(0); buf.truncate(0)
+        for pub in publications:
+            row = [
+                pub.id if pub.id is not None else "",
+                pub.title or "",
+                pub.year if pub.year is not None else "",
+                pub.publication_type or "",
+                pub.publication_url or "",
+                pub.journal_name or "",
+                pub.researcher_id if pub.researcher_id is not None else "",
+                pub.journal_id if pub.journal_id is not None else ""
+            ]
+            writer.writerow(row)
+            yield buf.getvalue()
+            buf.seek(0); buf.truncate(0)
+        db.close()
+
+    ts = datetime.datetime.now().strftime("%Y-%m-%d")
+    filename = f"publications_current_{ts}.csv"
     headers = {"Content-Disposition": f'attachment; filename="{filename}"'}
     return StreamingResponse(csv_iter(), media_type="text/csv", headers=headers)
 
@@ -275,17 +318,75 @@ def import_clarivate(jif_csv_path):
     finally:
         session.close()
 
-def update_UWA_staff_fields(file_path="app/files/uploads_current/UWA_staff_field_upload.csv"):
-    df = pd.read_csv(file_path)
-    # Strip whitespace from column names and values
+def update_researchers(file_path="app/files/uploads_current/researchers_upload.csv"):
+    """
+    Replaces all records in the Researchers table with those provided in the CSV.
+    Expected headers:
+    ["Researcher ID", "Name", "University", "Profile URL", "Job Title", "Level", "Field"]
+    """
+    required_headers = [
+        "Researcher ID", "Name", "University", "Profile URL", "Job Title", "Level", "Field"
+    ]
+    df = pd.read_csv(file_path, dtype=str)
     df.columns = [col.strip() for col in df.columns]
+    missing = [col for col in required_headers if col not in df.columns]
+    if missing:
+        raise ValueError(f"Missing required columns: {', '.join(missing)}")
+    df = df[required_headers].fillna("")
 
     session = SessionLocal()
     try:
+        session.query(Researchers).delete()
+        session.commit()
         for _, row in df.iterrows():
-            researcher = session.query(Researchers).filter_by(name=row['Name']).first()
-            if researcher:
-                researcher.field = row['Field']
+            researcher = Researchers(
+                id=int(row["Researcher ID"]) if str(row["Researcher ID"]).strip() else None,
+                name=row["Name"],
+                university=row["University"],
+                profile_url=row["Profile URL"] or None,
+                job_title=row["Job Title"] or None,
+                level=row["Level"] or None,
+                field=row["Field"] or None
+            )
+            session.add(researcher)
+        session.commit()
+    finally:
+        session.close()
+
+def update_publications(file_path="app/files/uploads_current/publications_upload.csv"):
+    """
+    Replaces all records in the Publications table with those provided in the CSV.
+    Expected headers:
+    ["Publication ID", "Title", "Year", "Publication Type", 
+     "Publication URL", "Journal Name", "Researcher ID", "Journal ID"]
+    """
+    required_headers = [
+        "Publication ID", "Title", "Year", "Publication Type", 
+        "Publication URL", "Journal Name", "Researcher ID", "Journal ID"
+    ]
+    df = pd.read_csv(file_path, dtype=str)
+    df.columns = [col.strip() for col in df.columns]
+    missing = [col for col in required_headers if col not in df.columns]
+    if missing:
+        raise ValueError(f"Missing required columns: {', '.join(missing)}")
+    df = df[required_headers].fillna("")
+
+    session = SessionLocal()
+    try:
+        session.query(Publications).delete()
+        session.commit()
+        for _, row in df.iterrows():
+            pub = Publications(
+                id=int(row["Publication ID"]) if str(row["Publication ID"]).strip() else None,
+                title=row["Title"],
+                year=int(row["Year"]) if str(row["Year"]).strip() else None,
+                publication_type=row["Publication Type"] or None,
+                publication_url=row["Publication URL"] or None,
+                journal_name=row["Journal Name"] or None,
+                researcher_id=int(row["Researcher ID"]) if str(row["Researcher ID"]).strip() else None,
+                journal_id=int(row["Journal ID"]) if str(row["Journal ID"]).strip() else None
+            )
+            session.add(pub)
         session.commit()
     finally:
         session.close()
@@ -514,7 +615,3 @@ def rename_db(old_db_name, new_db_name):
             f.write(f"{name}\n")
 
     print(f"Renamed {old_db_name}.db to {new_db_name}.db")
-
-
-if __name__ == "__main__":
-    update_UWA_staff_fields("app/files/UWA_staff_field_mapping_original.csv")

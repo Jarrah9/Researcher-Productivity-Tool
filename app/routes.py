@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Request, Path, UploadFile, File
-from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
+from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse, FileResponse
 from fastapi.templating import Jinja2Templates
 from contextlib import redirect_stdout
 from app.scrapers.update import update_all
@@ -12,11 +12,13 @@ from app.helpers.admin_funcs import (
     download_master_csv,
     download_ABDC_template,
     download_clarivate_template,
-    download_UWA_staff_field_template,
+    download_researchers_template,
+    download_publications_template,
     save_uploaded_file,
     replace_ABDC_rankings,
     import_clarivate,
-    update_UWA_staff_fields,
+    update_researchers,
+    update_publications,
     reupload_master_spreadsheet,
     switch_db
 )
@@ -260,9 +262,27 @@ def clarivate_template_route():
     return download_clarivate_template()
 
 
-@router.get("/admin/download/UWA_staff_field_template.csv")
-def uwa_staff_field_template_route():
-    return download_UWA_staff_field_template()
+@router.get("/admin/download/researchers_template.csv")
+def researchers_template_route():
+    return download_researchers_template()
+
+@router.get("/admin/download/publications_template.csv")
+def publications_template_route():
+    return download_publications_template()
+
+@router.post("/admin/download-db")
+async def download_db_route(request: Request):
+    user = request.session.get("user")
+    if not user:
+        return RedirectResponse(url="/", status_code=303)
+    form = await request.form()
+    db_name = form.get("db_name")
+    from pathlib import Path
+    db_path = Path("app") / f"{db_name}.db"
+    if not db_path.exists():
+        request.session["flash"] = f"Database '{db_name}' not found."
+        return RedirectResponse(url="/admin", status_code=303)
+    return FileResponse(path=db_path, filename=f"{db_name}.db", media_type="application/octet-stream")
 
 # ------------------------
 # Admin Upload Functionalities
@@ -346,24 +366,49 @@ async def upload_clarivate(
     UNIVERSITY_STATS_CACHE = None  # Clear university cache to reflect updated journal data
     return RedirectResponse(url="/admin", status_code=303)
 
-@router.post("/admin/upload/uwa_staff_field")
-async def upload_uwa_staff_field(
+@router.post("/admin/upload/researchers")
+async def upload_researchers(
     request: Request,
-    uwa_staff_field_csv: UploadFile = File(None)
+    researchers_csv: UploadFile = File(None)
 ):
-    if not uwa_staff_field_csv:
+    if not researchers_csv:
         return templates.TemplateResponse(
             "admin.html",
             {"request": request, "user": request.session.get("user"), "error": "No file uploaded."}
         )
     # Save the uploaded file
-    file_path = save_uploaded_file(uwa_staff_field_csv, "UWA_staff_field_upload.csv")
+    file_path = save_uploaded_file(researchers_csv, "researchers_upload.csv")
     # Flash message
     request.session["flash"] = (
-        f"File '{uwa_staff_field_csv.filename}' uploaded successfully."
+        f"File '{researchers_csv.filename}' uploaded successfully."
     )
     try:
-        update_UWA_staff_fields(file_path)
+        update_researchers(file_path)
+    except Exception as e:
+        request.session["flash"] += f" However, there was an error processing the file. Please ensure it is correctly formatted."
+    global RESEARCHER_STATS_CACHE, UNIVERSITY_STATS_CACHE
+    RESEARCHER_STATS_CACHE = None  # Clear researcher cache to reflect updated journal data
+    UNIVERSITY_STATS_CACHE = None  # Clear university cache to reflect updated journal data
+    return RedirectResponse(url="/admin", status_code=303)
+
+@router.post("/admin/upload/publications")
+async def upload_publications(
+    request: Request,
+    publications_csv: UploadFile = File(None)
+):
+    if not publications_csv:
+        return templates.TemplateResponse(
+            "admin.html",
+            {"request": request, "user": request.session.get("user"), "error": "No file uploaded."}
+        )
+    # Save the uploaded file
+    file_path = save_uploaded_file(publications_csv, "publications_upload.csv")
+    # Flash message
+    request.session["flash"] = (
+        f"File '{publications_csv.filename}' uploaded successfully."
+    )
+    try:
+        update_publications(file_path)
     except Exception as e:
         request.session["flash"] += f" However, there was an error processing the file. Please ensure it is correctly formatted."
     global RESEARCHER_STATS_CACHE, UNIVERSITY_STATS_CACHE
