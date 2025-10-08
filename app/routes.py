@@ -249,10 +249,12 @@ async def upload_master_csv(
     file_path = save_uploaded_file(master_csv, "master_spreadsheet_upload.csv")
     # Flash message
     request.session["flash"] = (
-        f"File '{master_csv.filename}' uploaded successfully.<br>"
-        "The website will be temporarily unavailable while the CSV file is being processed."
+        f"File '{master_csv.filename}' uploaded successfully."
     )
-    reupload_master_spreadsheet(file_path)
+    try:
+        reupload_master_spreadsheet(file_path)
+    except:
+        request.session["flash"] += f" However, there was an error processing the file. Please ensure it is correctly formatted."
     global RESEARCHER_STATS_CACHE, UNIVERSITY_STATS_CACHE
     RESEARCHER_STATS_CACHE = None  # Clear researcher cache to reflect updated data
     UNIVERSITY_STATS_CACHE = None  # Clear university cache to reflect updated data
@@ -276,10 +278,12 @@ async def upload_abdc(
     file_path = save_uploaded_file(abdc_csv, "ABDC_upload.csv")
     # Flash message
     request.session["flash"] = (
-        f"File '{abdc_csv.filename}' uploaded successfully.<br>"
-        "The website will be temporarily unavailable while the CSV file is being processed."
+        f"File '{abdc_csv.filename}' uploaded successfully."
     )
-    replace_ABDC_rankings(file_path)
+    try:
+        replace_ABDC_rankings(file_path)
+    except Exception as e:
+        request.session["flash"] += f" However, there was an error processing the file. Please ensure it is correctly formatted."
     try:
         import_clarivate("/app/files/uploads_current/clarivate_upload.csv")  # Re-import all JIF data to refresh journal matches
     except Exception as e:
@@ -311,7 +315,10 @@ async def upload_clarivate(
     request.session["flash"] = (
         f"File '{clarivate_csv.filename}' uploaded successfully"
     )
-    import_clarivate(file_path)
+    try:
+        import_clarivate(file_path)
+    except Exception as e:
+        request.session["flash"] += f" However, there was an error processing the file. Please ensure it is correctly formatted."
     global RESEARCHER_STATS_CACHE, UNIVERSITY_STATS_CACHE
     RESEARCHER_STATS_CACHE = None  # Clear researcher cache to reflect updated journal data
     UNIVERSITY_STATS_CACHE = None  # Clear university cache to reflect updated journal data
@@ -338,7 +345,10 @@ async def upload_uwa_staff_field(
     request.session["flash"] = (
         f"File '{uwa_staff_field_csv.filename}' uploaded successfully."
     )
-    update_UWA_staff_fields(file_path)
+    try:
+        update_UWA_staff_fields(file_path)
+    except Exception as e:
+        request.session["flash"] += f" However, there was an error processing the file. Please ensure it is correctly formatted."
     global RESEARCHER_STATS_CACHE, UNIVERSITY_STATS_CACHE
     RESEARCHER_STATS_CACHE = None  # Clear researcher cache to reflect updated journal data
     UNIVERSITY_STATS_CACHE = None  # Clear university cache to reflect updated journal data

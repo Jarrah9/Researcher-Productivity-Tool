@@ -433,3 +433,6 @@ def switch_db(db_name):
     except Exception as e:
         print(f"Warning: Could not reload SQLAlchemy engine automatically. Please restart the server. Error: {e}")
     return f"Switched to {db_name}.db"
+
+if __name__ == "__main__":
+    update_UWA_staff_fields("app/files/UWA_staff_field_mapping_original.csv")
