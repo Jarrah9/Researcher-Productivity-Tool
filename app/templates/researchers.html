@@ -1,6 +1,14 @@
 {% extends "base.html" %}
 
 {% block content %}
+<head>
+    <style>
+        #clearSortBtn:hover {
+            background: #0d47a1 !important;
+            color: #fff;
+        }
+    </style>
+</head>
 <h1 style="text-align:center; margin-top:30px;">Researcher Rankings</h1>
 
 <!-- Inline map so we can render full university names in the table -->
@@ -73,6 +81,15 @@
     </select>
 </div>
 
+<div style="display: flex; justify-content: space-between; align-items: center; margin: 0 0 4px 0; width:90%; max-width:1200px; margin-left:auto; margin-right:auto;">
+    <div style="font-size: 0.95em; color: #555;">
+        Note: <b>Shift+Click</b> column headers for secondary sorting etc.
+    </div>
+    <button id="clearSortBtn" style="background: #1976d2; color: #fff; border: none; border-radius: 6px; padding: 6px 14px; font-size: 0.95em; cursor: pointer; box-shadow: 0 2px 6px #ccc; transition: background 0.2s;">
+        Clear Sorting
+    </button>
+</div>
+
 <table class="pub-table" id="researchers-table" style="text-align:center; margin: 30px auto; border-collapse: collapse; width: 90%; max-width: 1200px; background: #fff; box-shadow: 0 2px 8px #ccc;">
     <thead>
         <tr style="background: #1976d2; color: #fff;">
@@ -81,6 +98,10 @@
             <th style="padding: 12px 8px;" data-type="text">FoR <span class="arrow"></span></th>
             <th style="padding: 12px 8px;" data-type="level">Level <span class="arrow"></span></th>
             <th style="padding: 12px 8px;" data-type="text">University <span class="arrow"></span></th>
+            {% if request.query_params.get('sort_by', 'abdc_articles') == "abdc_a_star_a" %}
+                <th style="padding: 12px 8px;" data-type="number">A Journals <span class="arrow"></span></th>
+                <th style="padding: 12px 8px;" data-type="number">A* Journals <span class="arrow"></span></th>
+            {% endif %}
             <th style="padding: 12px 8px;" data-type="number">{{ variable_label }} <span class="arrow"></span></th>
         </tr>
     </thead>
@@ -93,6 +114,10 @@
             <td style="padding: 10px 6px;">{{ researcher.level }}</td>
             <!-- Use mapping so MU shows as MONASH -->
             <td style="padding: 10px 6px;">{{ uni_map.get(researcher.university, researcher.university) }}</td>
+            {% if request.query_params.get('sort_by', 'abdc_articles') == "abdc_a_star_a" %}
+                <td style="padding: 10px 6px;">{{ researcher.num_a }}</td>
+                <td style="padding: 10px 6px;">{{ researcher.num_a_star }}</td>
+            {% endif %}
             <td style="padding: 10px 6px;">{{ researcher.variable_value }}</td>
         </tr>
         {% endfor %}
@@ -111,12 +136,13 @@
     const table = document.getElementById('researchers-table');
     const tbody = table.tBodies[0];
     const headers = table.tHead.rows[0].cells;
-    const sortState = Array.from(headers).map(() => null);
-
     const rows = Array.from(tbody.querySelectorAll('tr'));
     let rowsPerPage = 50;
     let currentPage = 1;
     let filteredRows = [...rows];
+
+    // Multi-column sorting state
+    const sortOrder = [];
 
     function getRowsPerPage() {
         const val = document.getElementById('rowsPerPage').value;
@@ -151,70 +177,95 @@
         showPage(1);
     });
 
-    function renderSortArrows(activeIdx) {
+    document.getElementById('clearSortBtn').onclick = () => {
+        sortOrder.length = 0;
+        renderSortArrows();
+        filteredRows = [...rows];
+        filteredRows.forEach(row => tbody.appendChild(row));
+        showPage(1);
+    };
+
+    function renderSortArrows() {
         Array.from(headers).forEach((th, i) => {
             const arrow = th.querySelector('.arrow');
+            const orderIdx = sortOrder.findIndex(s => s.idx === i);
             if (!arrow) return;
-            if (i === activeIdx) {
-                arrow.textContent = sortState[i] === 'asc' ? '▲' : '▼';
+            if (orderIdx !== -1) {
+                arrow.textContent = sortOrder[orderIdx].dir === 'asc' ? '▲' : '▼';
+                arrow.style.opacity = 1;
+                arrow.title = orderIdx === 0 ? 'Primary sort' : `Sort priority ${orderIdx+1}`;
             } else {
                 arrow.textContent = '';
+                arrow.style.opacity = 0.6;
+                arrow.title = '';
             }
         });
     }
 
-    const getCellText = (tr, idx) => (tr.children[idx]?.textContent || '').trim();
+    function getCellText(tr, idx) {
+        return (tr.children[idx]?.textContent || '').trim();
+    }
 
-    const asNumber = (v) => {
+    function asNumber(v) {
         const cleaned = v.replace(/[, ]+/g, '');
         return parseFloat(cleaned);
-    };
+    }
 
-    const compareFactory = (idx, dir, type) => {
-        const mul = dir === 'asc' ? 1 : -1;
-        const levelOrder = { A:1, B:2, C:3, D:4, E:5 };
-        return (a, b) => {
+    function multiCompare(a, b) {
+        for (const {idx, dir} of sortOrder) {
+            const th = headers[idx];
+            const type = th.dataset.type || 'text';
             let va = getCellText(a, idx);
             let vb = getCellText(b, idx);
 
             if (type === 'level') {
+                const levelOrder = { A:1, B:2, C:3, D:4, E:5 };
                 const aMissing = !va || va.toLowerCase() === 'none';
                 const bMissing = !vb || vb.toLowerCase() === 'none';
-                if (aMissing && bMissing) return 0;
+                if (aMissing && bMissing) continue;
                 if (aMissing) return 1;
                 if (bMissing) return -1;
                 const oa = levelOrder[va] || 0;
                 const ob = levelOrder[vb] || 0;
-                return (oa - ob) * (dir === 'asc' ? 1 : -1);
+                if (oa !== ob) return dir === 'asc' ? oa - ob : ob - oa;
+                continue;
             }
 
             if (type === 'number') {
                 const na = asNumber(va);
                 const nb = asNumber(vb);
-                if (!Number.isNaN(na) && !Number.isNaN(nb)) {
-                    return (na - nb) * mul;
+                if (!Number.isNaN(na) && !Number.isNaN(nb) && na !== nb) {
+                    return dir === 'asc' ? na - nb : nb - na;
                 }
+            } else {
+                const cmp = va.localeCompare(vb, undefined, { numeric: true, sensitivity: 'base' });
+                if (cmp !== 0) return dir === 'asc' ? cmp : -cmp;
             }
-            return va.localeCompare(vb, undefined, { numeric: true, sensitivity: 'base' }) * mul;
-        };
-    };
+        }
+        return 0;
+    }
 
     Array.from(headers).forEach((th, idx) => {
-        th.addEventListener('click', () => {
-            sortState[idx] = sortState[idx] === 'asc' ? 'desc' : 'asc';
-            sortState.forEach((_, i) => { if (i !== idx) sortState[i] = null; });
-
-            const type = th.dataset.type || 'text';
-            const dir = sortState[idx] || 'asc';
-
-            filteredRows.sort(compareFactory(idx, dir, type));
+        th.addEventListener('click', (e) => {
+            const existing = sortOrder.find(s => s.idx === idx);
+            if (e.shiftKey) {
+                if (existing) {
+                    existing.dir = existing.dir === 'asc' ? 'desc' : 'asc';
+                } else {
+                    sortOrder.push({idx, dir: 'asc'});
+                }
+            } else {
+                sortOrder.length = 0;
+                sortOrder.push({idx, dir: existing && existing.dir === 'asc' ? 'desc' : 'asc'});
+            }
+            filteredRows.sort(multiCompare);
             filteredRows.forEach(row => tbody.appendChild(row));
-            renderSortArrows(idx);
+            renderSortArrows();
             showPage(1);
         });
     });
 
-    renderSortArrows(0);
+    renderSortArrows();
     showPage(1);
 </script>
 {% endblock %}

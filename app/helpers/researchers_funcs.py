@@ -37,6 +37,8 @@ def get_researcher_data(request: Request, RESEARCHER_STATS_CACHE):
                 total_articles = len(pubs)
                 abdc_articles = 0
                 abdc_a_star_a = 0
+                num_a = 0
+                num_a_star = 0
                 jif_list = []
                 jif5_list = []
                 citation_list = []
@@ -47,6 +49,10 @@ def get_researcher_data(request: Request, RESEARCHER_STATS_CACHE):
                             abdc_articles += 1
                         if journal.abdc_rank in ["A*", "A"]:
                             abdc_a_star_a += 1
+                        if journal.abdc_rank == "A":
+                            num_a += 1
+                        if journal.abdc_rank == "A*":
+                            num_a_star += 1
                         if journal.JIF is not None:
                             jif_list.append(journal.JIF)
                         if journal.JIF_5_year is not None:
@@ -65,6 +71,8 @@ def get_researcher_data(request: Request, RESEARCHER_STATS_CACHE):
                     "total_articles": total_articles,
                     "abdc_articles": abdc_articles,
                     "abdc_a_star_a": abdc_a_star_a,
+                    "num_a": num_a,
+                    "num_a_star": num_a_star,
                     "avg_jif": avg_jif,
                     "avg_jif5": avg_jif5,
                     "avg_citation": avg_citation,
