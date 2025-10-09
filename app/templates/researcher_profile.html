@@ -109,6 +109,21 @@
         <div style="font-size: 0.85em; color: #555; margin-bottom: 1px;">
             Note: <b>Shift+Click</b> column headers for secondary sorting etc.
         </div>
+        <form method="get" style="margin-bottom: 16px;">
+            <input type="hidden" name="abdc_only" value="false">
+            <label style="display: flex; align-items: center; gap: 10px; font-weight: normal; font-size: 1.05em;">
+                <input
+                    type="checkbox"
+                    id="abdcCheckbox"
+                    name="abdc_only"
+                    value="true"
+                    {% if abdc_only %}checked{% endif %}
+                    onchange="this.form.requestSubmit()"
+                    style="transform: scale(1.5); accent-color: #1976d2; cursor: pointer;"
+                />
+                Only show ABDC ranked
+            </label>
+        </form>
         <button id="clearSortBtn" style="display: flex; flex-direction: column; align-items: flex-end;">Clear Sorting</button>
     </div>
 
@@ -156,7 +171,19 @@
     const headers = table.tHead.rows[0].cells;
 
     const rows = Array.from(tbody.querySelectorAll('tr'));
-    let rowsPerPage = 50;
+    //remember rows per page between ABDC toggles only ---
+    const rowsSelect     = document.getElementById('rowsPerPage');
+    const abdcCheckbox   = document.getElementById('abdcCheckbox');
+    const researcherKey  = 'rowsChoice';
+    const toggleFlagKey  = 'abdcToggle';
+
+    // on load, if we are here due to an ABDC toggle, restore previous rows per page choice
+    if (sessionStorage.getItem(toggleFlagKey) === '1') {
+        const saved = sessionStorage.getItem(researcherKey);
+        if (saved) rowsSelect.value = saved;
+        sessionStorage.removeItem(toggleFlagKey);
+    }
+    let rowsPerPage = getRowsPerPage();
     let currentPage = 1;
     let filteredRows = [...rows];
 
@@ -190,9 +217,10 @@
     document.getElementById('prevPage').onclick = () => showPage(currentPage - 1);
     document.getElementById('nextPage').onclick = () => showPage(currentPage + 1);
 
-    document.getElementById('rowsPerPage').addEventListener('change', function () {
-        showPage(1);
-    });
+    rowsSelect.addEventListener('change', function () {
+    sessionStorage.setItem(researcherKey, this.value);   // save under our key
+    applyFilters();
+});
 
     document.getElementById('searchInput').addEventListener('input', function () {
         const q = this.value.toLowerCase();
@@ -200,6 +228,28 @@
         rows.forEach(tr => tr.style.display = 'none');
         showPage(1);
     });
+    
+    function applyFilters() {
+    const q = document.getElementById('searchInput').value.toLowerCase();
+    const abdcOnly = document.getElementById('abdcCheckbox').checked;
+
+    filteredRows = rows.filter(tr => {
+        const textMatch = tr.textContent.toLowerCase().includes(q);
+
+        const abdcRank = getCellText(tr, 3).trim().toLowerCase();
+        const validRanks = ['a*', 'a', 'b', 'c', 'd'];
+        const hasRanking = validRanks.includes(abdcRank);
+
+        return abdcOnly ? textMatch && hasRanking : textMatch;
+    });
+
+    filteredRows.forEach(row => tbody.appendChild(row)); // Rebuild order
+    rows.forEach(tr => tr.style.display = 'none');
+    showPage(1);
+    }
+
+document.getElementById('searchInput').addEventListener('input', applyFilters);
+//document.getElementById('abdcCheckbox').addEventListener('change', applyFilters);
 
     // Multi-column sorting
     const sortOrder = [];
@@ -293,6 +343,14 @@
 
     renderSortArrows();
     showPage(1);
+</script>
+<script>
+  abdcCheckbox.addEventListener('change', function () {
+      // remember current rows and mark that the reload is due to a toggle
+      sessionStorage.setItem(researcherKey, rowsSelect.value);
+      sessionStorage.setItem(toggleFlagKey, '1');
+      this.form.requestSubmit();        // reload to server
+  });
 </script>
 </body>
 {% endblock %}
